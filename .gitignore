@@ -1,0 +1,21 @@
+# Flutter specific
+gestion_rh/.dart_tool/
+gestion_rh/.flutter-plugins
+gestion_rh/.flutter-plugins-dependencies
+gestion_rh/.packages
+gestion_rh/build/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# PHP related (XAMPP mostly)
+gestion_rh_api/*.log
+gestion_rh_api/*.tmp
+
+# Common ignores
+*.bak
+*.tmp

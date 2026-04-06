@@ -1,0 +1,2 @@
+id	matricule	email	password_hash	role	nom	prenom	telephone	departement	poste	date_embauche	adresse	solde_conge	avatar	is_active	token	token_expiry	created_at	updated_at
+95	9767A	marwen.saidi772@stb.com.tn	$2y$10$S8APdCKaFVvkH81g4LlXu.QvUQkaKyjppaaxfWlgGsKcRaMZ0byaa	D‚veloppeur	Saidi	Marwen	NULL	NULL	D‚veloppeur	NULL	NULL	30.00	NULL	1	ae597bf8cad88a6e96b0500384a032848d93bf289c34a56ff4ea656f8a6592ea	2026-04-12 14:37:09	2026-03-28 00:38:22	2026-04-05 14:37:09

@@ -1,0 +1,36 @@
+
+Warning: Undefined array key "REQUEST_METHOD" in C:\xampp\htdocs\Gestion_RH\gestion_rh_api\config\db_connect.php on line 7
+{
+    "http_code": 200,
+    "response": {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": "OK"
+                        }
+                    ],
+                    "role": "model"
+                },
+                "finishReason": "STOP",
+                "index": 0
+            }
+        ],
+        "usageMetadata": {
+            "promptTokenCount": 13,
+            "candidatesTokenCount": 1,
+            "totalTokenCount": 39,
+            "promptTokensDetails": [
+                {
+                    "modality": "TEXT",
+                    "tokenCount": 13
+                }
+            ],
+            "thoughtsTokenCount": 25
+        },
+        "modelVersion": "gemini-2.5-flash",
+        "responseId": "Pa7KabbNAaWCxs0PtKfHmQg"
+    },
+    "curl_error": ""
+}

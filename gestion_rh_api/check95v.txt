@@ -1,0 +1,20 @@
+*************************** 1. row ***************************
+           id: 95
+    matricule: 9767A
+        email: marwen.saidi772@stb.com.tn
+password_hash: $2y$10$S8APdCKaFVvkH81g4LlXu.QvUQkaKyjppaaxfWlgGsKcRaMZ0byaa
+         role: D‚veloppeur
+          nom: Saidi
+       prenom: Marwen
+    telephone: NULL
+  departement: NULL
+        poste: D‚veloppeur
+date_embauche: NULL
+      adresse: NULL
+  solde_conge: 30.00
+       avatar: NULL
+    is_active: 1
+        token: ae597bf8cad88a6e96b0500384a032848d93bf289c34a56ff4ea656f8a6592ea
+ token_expiry: 2026-04-12 14:37:09
+   created_at: 2026-03-28 00:38:22
+   updated_at: 2026-04-05 14:37:09
