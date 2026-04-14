@@ -10,7 +10,7 @@ class User {
   final String? poste;
   final String? dateEmbauche;
   final String? adresse;
-  final int soldeConge;
+  final double soldeConge;
   final String? avatar;
   final bool isActive;
   final String? token;
@@ -27,7 +27,7 @@ class User {
     this.poste,
     this.dateEmbauche,
     this.adresse,
-    this.soldeConge = 30,
+    this.soldeConge = 30.0,
     this.avatar,
     this.isActive = true,
     this.token,
@@ -48,7 +48,7 @@ class User {
       poste: json['poste'],
       dateEmbauche: json['date_embauche'],
       adresse: json['adresse'],
-      soldeConge: int.tryParse(json['solde_conge']?.toString() ?? '30') ?? 30,
+      soldeConge: double.tryParse(json['solde_conge']?.toString() ?? '30') ?? 30.0,
       avatar: json['avatar'],
       isActive: json['is_active'] == '1' || json['is_active'] == 1 || json['is_active'] == true,
       token: json['token'],

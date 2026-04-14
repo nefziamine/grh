@@ -19,14 +19,14 @@ foreach ($required as $field) {
 $userId = intval($authUser['id']);
 $motif = $data['motif'] ?? '';
 
-// Check leave balance for annual leaves
-if ($data['type_conge'] === 'annuel') {
+// Check leave balance (except for unpaid leave)
+if ($data['type_conge'] !== 'sans_solde') {
     $stmt = $conn->prepare("SELECT solde_conge FROM users WHERE id = ?");
     $stmt->bind_param("i", $userId);
     $stmt->execute();
     $solde = $stmt->get_result()->fetch_assoc()['solde_conge'];
     
-    if (intval($data['nb_jours']) > $solde) {
+    if (floatval($data['nb_jours']) * 24 > $solde) {
         sendResponse(["success" => false, "message" => "Solde insuffisant"], 400);
     }
 }

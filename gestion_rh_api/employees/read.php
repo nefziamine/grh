@@ -23,8 +23,13 @@ if ($result->num_rows === 0) {
     sendResponse(["success" => false, "message" => "Employé non trouvé"], 404);
 }
 
+$user = $result->fetch_assoc();
+if (isset($user['solde_conge'])) {
+    $user['solde_conge'] = round($user['solde_conge'] / 24, 1);
+}
+
 sendResponse([
     "success" => true,
-    "data" => $result->fetch_assoc()
+    "data" => $user
 ]);
 ?>

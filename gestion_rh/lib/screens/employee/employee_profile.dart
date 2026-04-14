@@ -89,7 +89,7 @@ class _EmployeeProfileState extends State<EmployeeProfile> {
                       'prenom': prenomCtrl.text,
                       'poste': posteCtrl.text,
                       'departement': depCtrl.text,
-                      'solde_conge': int.tryParse(soldeCtrl.text) ?? user?.soldeConge,
+                      'solde_conge': double.tryParse(soldeCtrl.text) ?? user?.soldeConge,
                       'role': roleCtrl.text,
                     },
                     'email': emailCtrl.text,

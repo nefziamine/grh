@@ -34,7 +34,7 @@ if ($stmt->execute()) {
 
     // Every 5 retards = -12h (0.5 day) conge
     if ($count > 0 && $count % 5 == 0) {
-        $updateSolde = $conn->prepare("UPDATE users SET solde_conge = solde_conge - 0.5 WHERE id = ?");
+        $updateSolde = $conn->prepare("UPDATE users SET solde_conge = solde_conge - 12 WHERE id = ?");
         $updateSolde->bind_param("i", $targetUserId);
         $updateSolde->execute();
         

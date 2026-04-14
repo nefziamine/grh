@@ -14,6 +14,7 @@ import 'employee_credits.dart';
 import 'employee_notifications.dart';
 import 'employee_profile.dart';
 import '../rh/rh_documents.dart';
+import '../rh/rh_dashboard.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 
@@ -27,11 +28,13 @@ class EmployeeHome extends StatefulWidget {
 class _EmployeeHomeState extends State<EmployeeHome> {
   int _currentIndex = 0;
   int _unreadNotifs = 0;
+  bool _isSidebarExpanded = true;
 
   List<dynamic> _absences = [];
   List<dynamic> _retards = [];
   bool _isLoadingStats = false;
   bool _hasPointedToday = false;
+  Map<String, dynamic> _stats = {};
   Timer? _refreshTimer;
 
   @override
@@ -39,6 +42,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
     super.initState();
     _loadUnreadCount();
     _loadAbsencesAndRetards();
+    _loadStats();
     _checkTodayPointage();
     _startAutoRefresh();
   }
@@ -53,6 +57,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (_currentIndex == 0) {
         _loadAbsencesAndRetards();
+        _loadStats(showLoading: false);
         _loadUnreadCount();
         _checkTodayPointage();
         AuthService.getProfile().then((_) {
@@ -77,6 +82,24 @@ class _EmployeeHomeState extends State<EmployeeHome> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingStats = false);
+    }
+  }
+
+  Future<void> _loadStats({bool showLoading = true}) async {
+    if (showLoading && mounted) setState(() => _isLoadingStats = true);
+    try {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final result = await ApiService.get('${ApiConfig.dashboardStats}?t=$timestamp', forceRefresh: true);
+      if (result['success'] == true && mounted) {
+        setState(() {
+          _stats = result['data'] ?? {};
+          if (showLoading) _isLoadingStats = false;
+        });
+      } else {
+        if (showLoading && mounted) setState(() => _isLoadingStats = false);
+      }
+    } catch (e) {
+      if (showLoading && mounted) setState(() => _isLoadingStats = false);
     }
   }
 
@@ -137,6 +160,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
       _buildDashboard(user),
       const EmployeeConges(),
       const EmployeeCredits(),
+      const RHDashboard(),
       const EmployeeProfile(),
     ];
 
@@ -151,39 +175,133 @@ class _EmployeeHomeState extends State<EmployeeHome> {
         setState(() => _currentIndex = 0);
       },
       child: Scaffold(
-        body: pages[_currentIndex],
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: STBColors.white,
-            boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10, offset: const Offset(0, -2)),
-            ],
-          ),
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (i) {
-              if (_currentIndex == 3 && i != 3 && _unreadNotifs > 0) {
-                setState(() => _unreadNotifs = 0);
-                ApiService.post(ApiConfig.notificationMarkRead, {'all': true});
-              }
-              setState(() => _currentIndex = i);
-            },
-            selectedItemColor: STBColors.primaryBlue,
-            unselectedItemColor: STBColors.textSecondary,
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            selectedLabelStyle: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
-            unselectedLabelStyle: GoogleFonts.inter(fontSize: 11),
-            items: [
-              const BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'Accueil'),
-              const BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), activeIcon: Icon(Icons.calendar_today), label: 'Congés'),
-              const BottomNavigationBarItem(icon: Icon(Icons.account_balance_outlined), activeIcon: Icon(Icons.account_balance), label: 'Crédits'),
-              const BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'Profil'),
-            ],
-          ),
+        backgroundColor: STBColors.bgLight,
+        body: Stack(
+          children: [
+            Row(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  width: _isSidebarExpanded ? 260 : 0,
+                  clipBehavior: Clip.hardEdge,
+                  decoration: const BoxDecoration(),
+                  child: SingleChildScrollView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: 260,
+                      child: _buildSidebar(),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ClipRRect(
+                    child: pages[_currentIndex],
+                  ),
+                ),
+              ],
+            ),
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              top: 24,
+              left: _isSidebarExpanded ? -100 : 24,
+              child: FloatingActionButton.small(
+                heroTag: 'emp_menu_btn',
+                backgroundColor: STBColors.white,
+                onPressed: () => setState(() => _isSidebarExpanded = true),
+                elevation: _isSidebarExpanded ? 0 : 8,
+                child: const Icon(Icons.menu, color: STBColors.primaryBlue),
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSidebar() {
+    return Container(
+      width: 260,
+      decoration: BoxDecoration(
+        color: STBColors.white,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(5, 0)),
+        ],
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.menu_open, color: STBColors.textSecondary),
+                onPressed: () => setState(() => _isSidebarExpanded = false),
+                tooltip: 'Masquer le menu',
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Image.asset('assets/images/Logo_STB.png', height: 70),
+          const SizedBox(height: 40),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                _buildSidebarItem(0, Icons.home_outlined, Icons.home, 'Accueil'),
+                const SizedBox(height: 8),
+                _buildSidebarItem(1, Icons.calendar_today_outlined, Icons.calendar_today, 'Congés'),
+                const SizedBox(height: 8),
+                _buildSidebarItem(2, Icons.account_balance_outlined, Icons.account_balance, 'Crédits'),
+                const SizedBox(height: 8),
+                _buildSidebarItem(3, Icons.dashboard_outlined, Icons.dashboard, 'Dashboard'),
+                const SizedBox(height: 8),
+                _buildSidebarItem(4, Icons.person_outline, Icons.person, 'Profil'),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: STBColors.danger.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.logout, color: STBColors.danger, size: 20),
+              ),
+              title: Text('Déconnexion', style: GoogleFonts.inter(color: STBColors.danger, fontWeight: FontWeight.w600, fontSize: 14)),
+              onTap: _logout,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarItem(int index, IconData icon, IconData activeIcon, String label) {
+    final isSelected = _currentIndex == index;
+    final color = isSelected ? STBColors.primaryBlue : STBColors.textSecondary;
+    return ListTile(
+      leading: Icon(isSelected ? activeIcon : icon, color: color, size: 22),
+      title: Text(label, style: GoogleFonts.inter(color: color, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500, fontSize: 14)),
+      trailing: (index == 3 && _unreadNotifs > 0) 
+          ? Container(padding: const EdgeInsets.all(5), decoration: const BoxDecoration(color: STBColors.danger, shape: BoxShape.circle)) 
+          : null,
+      selected: isSelected,
+      selectedTileColor: STBColors.primaryBlue.withValues(alpha: 0.08),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      onTap: () {
+        if (_currentIndex == 3 && index != 3 && _unreadNotifs > 0) {
+          setState(() => _unreadNotifs = 0);
+          ApiService.post(ApiConfig.notificationMarkRead, {'all': true});
+        }
+        setState(() => _currentIndex = index);
+      },
     );
   }
 
@@ -398,12 +516,45 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Ma Ponctualité', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w800, color: STBColors.textPrimary, letterSpacing: -0.5)),
+                      Text('Mes Statistiques', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w800, color: STBColors.textPrimary, letterSpacing: -0.5)),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(color: STBColors.primaryBlue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
                         child: Text('${DateTime.now().year}', style: GoogleFonts.inter(fontSize: 12, color: STBColors.primaryBlue, fontWeight: FontWeight.w700)),
                       ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: _buildKPICard('Mes Congés (attente)', '${_stats['conges_en_attente'] ?? 0}', Icons.hourglass_empty, STBColors.warning)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildKPICard('Mes Crédits (attente)', '${_stats['credits_en_attente'] ?? 0}', Icons.account_balance, STBColors.primaryGreen)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: _buildKPICard('Absences (mois)', '${_stats['absences_mois'] ?? 0}', Icons.person_off, STBColors.danger)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildKPICard('Retards (mois)', '${_stats['retards_mois'] ?? 0}', Icons.schedule, STBColors.warning)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Ma Ponctualité', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w800, color: STBColors.textPrimary, letterSpacing: -0.5)),
                     ],
                   ),
                 ),
@@ -420,7 +571,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                           onTap: () => _showHistoryBottomSheet('Absences'),
                           borderRadius: BorderRadius.circular(24),
                           child: _buildStatCard(
-                            'Absences',
+                            'Total Abs.',
                             '${_absences.length}',
                             'Jours',
                             Icons.event_busy_rounded,
@@ -434,7 +585,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                           onTap: () => _showHistoryBottomSheet('Retards'),
                           borderRadius: BorderRadius.circular(24),
                           child: _buildStatCard(
-                            'Retards',
+                            'Total Retards',
                             '${_retards.length}',
                             'Fois',
                             Icons.more_time_rounded,
@@ -664,6 +815,31 @@ class _EmployeeHomeState extends State<EmployeeHome> {
           ),
           const SizedBox(height: 4),
           Text(title, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: STBColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKPICard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: STBColors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(height: 12),
+          Text(value, style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w800, color: STBColors.textPrimary)),
+          const SizedBox(height: 2),
+          Text(title, style: GoogleFonts.inter(fontSize: 12, color: STBColors.textSecondary)),
         ],
       ),
     );

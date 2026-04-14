@@ -2,96 +2,114 @@
 require_once __DIR__ . '/../config/db_connect.php';
 
 $authUser = getAuthUser($conn);
-requireRole($authUser, ['admin', 'rh']);
+$userId = intval($authUser['id']);
+$isRH = in_array($authUser['role'], ['admin', 'rh']);
+$userFilter = $isRH ? "" : " AND user_id = $userId";
 
 $month = isset($_GET['month']) ? intval($_GET['month']) : intval(date('m'));
 $year = isset($_GET['year']) ? intval($_GET['year']) : intval(date('Y'));
 
-$stats = [];
+$stats = [
+    'is_rh' => $isRH,
+    'conges_en_attente' => 0,
+    'credits_en_attente' => 0,
+    'absences_mois' => 0,
+    'retards_mois' => 0,
+    'retard_moyen_minutes' => 0,
+    'absence_trend' => [],
+    'retard_trend' => [],
+    'conge_types' => []
+];
 
-// Total employees
-$r = $conn->query("SELECT COUNT(*) as total FROM users WHERE role = 'employee' AND is_active = 1");
-$stats['total_employees'] = intval($r->fetch_assoc()['total']);
+if ($isRH) {
+    // Global Summary
+    $r = $conn->query("SELECT COUNT(*) as total FROM conges WHERE statut = 'en_attente'");
+    if($r) $stats['conges_en_attente'] = intval($r->fetch_assoc()['total']);
 
-// Total users
-$r = $conn->query("SELECT COUNT(*) as total FROM users WHERE is_active = 1");
-$stats['total_users'] = intval($r->fetch_assoc()['total']);
+    $r = $conn->query("SELECT COUNT(*) as total FROM credits WHERE statut = 'en_attente'");
+    if($r) $stats['credits_en_attente'] = intval($r->fetch_assoc()['total']);
 
-// Pending leave requests
-$r = $conn->query("SELECT COUNT(*) as total FROM conges WHERE statut = 'en_attente'");
-$stats['conges_en_attente'] = intval($r->fetch_assoc()['total']);
+    $r = $conn->query("SELECT COUNT(*) as total FROM absences WHERE MONTH(date_absence) = $month AND YEAR(date_absence) = $year");
+    if($r) $stats['absences_mois'] = intval($r->fetch_assoc()['total']);
 
-// Approved leaves this month
-$r = $conn->query("SELECT COUNT(*) as total FROM conges WHERE statut = 'approuve' AND MONTH(date_debut) = $month AND YEAR(date_debut) = $year");
-$stats['conges_approuves_mois'] = intval($r->fetch_assoc()['total']);
+    $r = $conn->query("SELECT COUNT(*) as total FROM retards WHERE MONTH(date_retard) = $month AND YEAR(date_retard) = $year");
+    if($r) $stats['retards_mois'] = intval($r->fetch_assoc()['total']);
 
-// Absences this month
-$r = $conn->query("SELECT COUNT(*) as total FROM absences WHERE MONTH(date_absence) = $month AND YEAR(date_absence) = $year");
-$stats['absences_mois'] = intval($r->fetch_assoc()['total']);
+    $r = $conn->query("SELECT AVG(duree_minutes) as avg_dur FROM retards WHERE MONTH(date_retard) = $month AND YEAR(date_retard) = $year");
+    if($r) {
+        $avg = $r->fetch_assoc()['avg_dur'];
+        $stats['retard_moyen_minutes'] = $avg ? round(floatval($avg), 1) : 0;
+    }
+} else {
+    // Personal Summary
+    $r = $conn->query("SELECT COUNT(*) as total FROM conges WHERE user_id = $userId AND statut = 'en_attente'");
+    if($r) $stats['conges_en_attente'] = intval($r->fetch_assoc()['total']);
 
-// Unjustified absences this month
-$r = $conn->query("SELECT COUNT(*) as total FROM absences WHERE type_absence = 'injustifiee' AND MONTH(date_absence) = $month AND YEAR(date_absence) = $year");
-$stats['absences_injustifiees'] = intval($r->fetch_assoc()['total']);
+    $r = $conn->query("SELECT COUNT(*) as total FROM credits WHERE user_id = $userId AND statut = 'en_attente'");
+    if($r) $stats['credits_en_attente'] = intval($r->fetch_assoc()['total']);
 
-// Tardiness this month
-$r = $conn->query("SELECT COUNT(*) as total FROM retards WHERE MONTH(date_retard) = $month AND YEAR(date_retard) = $year");
-$stats['retards_mois'] = intval($r->fetch_assoc()['total']);
+    $r = $conn->query("SELECT COUNT(*) as total FROM absences WHERE user_id = $userId AND MONTH(date_absence) = $month AND YEAR(date_absence) = $year");
+    if($r) $stats['absences_mois'] = intval($r->fetch_assoc()['total']);
 
-// Average tardiness duration
-$r = $conn->query("SELECT AVG(duree_minutes) as avg_dur FROM retards WHERE MONTH(date_retard) = $month AND YEAR(date_retard) = $year");
-$avg = $r->fetch_assoc()['avg_dur'];
-$stats['retard_moyen_minutes'] = $avg ? round(floatval($avg), 1) : 0;
+    $r = $conn->query("SELECT COUNT(*) as total FROM retards WHERE user_id = $userId AND MONTH(date_retard) = $month AND YEAR(date_retard) = $year");
+    if($r) $stats['retards_mois'] = intval($r->fetch_assoc()['total']);
 
-// Pending credit requests
-$r = $conn->query("SELECT COUNT(*) as total FROM credits WHERE statut = 'en_attente'");
-$stats['credits_en_attente'] = intval($r->fetch_assoc()['total']);
+    $r = $conn->query("SELECT AVG(duree_minutes) as avg_dur FROM retards WHERE user_id = $userId AND MONTH(date_retard) = $month AND YEAR(date_retard) = $year");
+    if($r) {
+        $avg = $r->fetch_assoc()['avg_dur'];
+        $stats['retard_moyen_minutes'] = $avg ? round(floatval($avg), 1) : 0;
+    }
+}
 
-// Total credit amount in progress
-$r = $conn->query("SELECT SUM(montant) as total FROM credits WHERE statut IN ('approuve', 'en_cours')");
-$total_credits = $r->fetch_assoc()['total'];
-$stats['montant_credits_actifs'] = $total_credits ? floatval($total_credits) : 0;
-
-// Department breakdown
-$r = $conn->query("SELECT departement, COUNT(*) as count FROM users WHERE role = 'employee' AND is_active = 1 AND departement IS NOT NULL GROUP BY departement ORDER BY count DESC");
-$stats['departements'] = [];
-while ($row = $r->fetch_assoc()) { $stats['departements'][] = $row; }
-
-// Monthly absence trend (last 6 months)
-$stats['absence_trend'] = [];
+// Trends (Work for both)
 for ($i = 5; $i >= 0; $i--) {
     $m = date('m', strtotime("-$i months"));
     $y = date('Y', strtotime("-$i months"));
-    $r = $conn->query("SELECT COUNT(*) as total FROM absences WHERE MONTH(date_absence) = $m AND YEAR(date_absence) = $y");
+    $label = date('M Y', strtotime("-$i months"));
+
+    $r = $conn->query("SELECT COUNT(*) as total FROM absences WHERE MONTH(date_absence) = $m AND YEAR(date_absence) = $y $userFilter");
     $stats['absence_trend'][] = [
-        'month' => date('M Y', strtotime("-$i months")),
-        'count' => intval($r->fetch_assoc()['total'])
+        'month' => $label,
+        'count' => $r ? intval($r->fetch_assoc()['total']) : 0
     ];
-}
 
-// Monthly tardiness trend (last 6 months)
-$stats['retard_trend'] = [];
-for ($i = 5; $i >= 0; $i--) {
-    $m = date('m', strtotime("-$i months"));
-    $y = date('Y', strtotime("-$i months"));
-    $r = $conn->query("SELECT COUNT(*) as total FROM retards WHERE MONTH(date_retard) = $m AND YEAR(date_retard) = $y");
+    $r = $conn->query("SELECT COUNT(*) as total FROM retards WHERE MONTH(date_retard) = $m AND YEAR(date_retard) = $y $userFilter");
     $stats['retard_trend'][] = [
-        'month' => date('M Y', strtotime("-$i months")),
-        'count' => intval($r->fetch_assoc()['total'])
+        'month' => $label,
+        'count' => $r ? intval($r->fetch_assoc()['total']) : 0
     ];
 }
 
-// Leave type distribution
-$r = $conn->query("SELECT type_conge, COUNT(*) as count FROM conges WHERE YEAR(created_at) = $year GROUP BY type_conge");
-$stats['conge_types'] = [];
-while ($row = $r->fetch_assoc()) { $stats['conge_types'][] = $row; }
+// Leave type distribution (Work for both)
+$r = $conn->query("SELECT type_conge, COUNT(*) as count FROM conges WHERE YEAR(created_at) = $year $userFilter GROUP BY type_conge");
+if($r) {
+    while ($row = $r->fetch_assoc()) {
+        $stats['conge_types'][] = [
+            'type_conge' => $row['type_conge'],
+            'count' => intval($row['count'])
+        ];
+    }
+}
 
-// Top absent employees
-$r = $conn->query("SELECT u.nom, u.prenom, u.matricule, COUNT(a.id) as total_absences 
-                    FROM absences a JOIN users u ON a.user_id = u.id 
-                    WHERE YEAR(a.date_absence) = $year 
-                    GROUP BY a.user_id ORDER BY total_absences DESC LIMIT 5");
-$stats['top_absents'] = [];
-while ($row = $r->fetch_assoc()) { $stats['top_absents'][] = $row; }
+// RH Exclusive Detailed View
+if ($isRH) {
+    // Department breakdown
+    $r = $conn->query("SELECT departement, COUNT(*) as count FROM users WHERE role = 'employee' AND is_active = 1 AND departement IS NOT NULL GROUP BY departement ORDER BY count DESC");
+    $stats['departements'] = [];
+    if($r) {
+        while ($row = $r->fetch_assoc()) { $stats['departements'][] = $row; }
+    }
 
-sendResponse(["success" => true, "data" => $stats]);
+    // Top absent employees
+    $r = $conn->query("SELECT u.nom, u.prenom, u.matricule, COUNT(a.id) as total_absences 
+                        FROM absences a JOIN users u ON a.user_id = u.id 
+                        WHERE YEAR(a.date_absence) = $year 
+                        GROUP BY a.user_id ORDER BY total_absences DESC LIMIT 5");
+    $stats['top_absents'] = [];
+    if($r) {
+        while ($row = $r->fetch_assoc()) { $stats['top_absents'][] = $row; }
+    }
+}
+
+sendResponse(["success" => true, "version" => "2.0_debug", "data" => $stats]);
 ?>

@@ -58,6 +58,12 @@ $stmt = $conn->prepare($sql);
 $stmt->bind_param($types, ...$values);
 
 if ($stmt->execute()) {
+    // Notify employee about the update
+    if ($authUser['id'] != $id) {
+        $notifStmt = $conn->prepare("INSERT INTO notifications (user_id, titre, message, type_notif) VALUES (?, 'Mise à jour profil', 'Votre profil a été mis à jour par l\'administration.', 'system')");
+        $notifStmt->bind_param("i", $id);
+        $notifStmt->execute();
+    }
     sendResponse(["success" => true, "message" => "Employé mis à jour avec succès"]);
 } else {
     sendResponse(["success" => false, "message" => "Erreur lors de la mise à jour"], 500);

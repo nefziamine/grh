@@ -30,6 +30,9 @@ $result = $conn->query($sql);
 
 $employees = [];
 while ($row = $result->fetch_assoc()) {
+    if (isset($row['solde_conge'])) {
+        $row['solde_conge'] = round($row['solde_conge'] / 24, 1);
+    }
     $employees[] = $row;
 }
 

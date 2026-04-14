@@ -6,8 +6,8 @@ class ApiConfig {
   static String get baseUrl {
     // 192.168.1.178 est l'adresse IPv4 de votre PC sur le réseau local.
     // L'émulateur Android peut utiliser 10.0.2.2, mais pour un vrai téléphone, on utilise l'IP WiFi.
-    if (kIsWeb) return 'http://localhost/Gestion_RH/gestion_rh_api';
-    return 'http://192.168.1.178/Gestion_RH/gestion_rh_api';
+    if (kIsWeb) return 'http://localhost/Gestion_RH1/gestion_rh_api';
+    return 'http://192.168.1.178/Gestion_RH1/gestion_rh_api';
   }
   // Auth
   static String get login => '$baseUrl/auth/login.php';

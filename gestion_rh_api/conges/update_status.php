@@ -41,9 +41,9 @@ $stmt = $conn->prepare("UPDATE conges SET statut = ?, commentaire_rh = ?, approv
 $stmt->bind_param("ssii", $data['statut'], $commentaire, $authUser['id'], $id);
 $stmt->execute();
 
-// If approved, deduct leave balance for annual leaves
-if ($data['statut'] === 'approuve' && $conge['type_conge'] === 'annuel') {
-    $newSolde = $conge['solde_conge'] - $conge['nb_jours'];
+// If approved, deduct leave balance (except for unpaid leave)
+if ($data['statut'] === 'approuve' && $conge['type_conge'] !== 'sans_solde') {
+    $newSolde = $conge['solde_conge'] - ($conge['nb_jours'] * 24);
     $updateSolde = $conn->prepare("UPDATE users SET solde_conge = ? WHERE id = ?");
     $updateSolde->bind_param("di", $newSolde, $conge['user_id']);
     $updateSolde->execute();

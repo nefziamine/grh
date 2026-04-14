@@ -26,6 +26,7 @@ class RHHome extends StatefulWidget {
 
 class _RHHomeState extends State<RHHome> {
   int _currentIndex = 0;
+  bool _isSidebarExpanded = true;
   Map<String, dynamic> _stats = {};
   bool _isLoading = true;
   Timer? _refreshTimer;
@@ -54,7 +55,7 @@ class _RHHomeState extends State<RHHome> {
   Future<void> _loadStats({bool showLoading = true}) async {
     if (showLoading) setState(() => _isLoading = true);
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final result = await ApiService.get('${ApiConfig.dashboardStats}?t=$timestamp');
+    final result = await ApiService.get('${ApiConfig.dashboardStats}?t=$timestamp', forceRefresh: true);
     if (result['success'] == true && mounted) {
       setState(() {
         _stats = result['data'] ?? {};
@@ -78,7 +79,6 @@ class _RHHomeState extends State<RHHome> {
       const RHConges(),
       const RHAbsences(),
       const RHRetards(), // New item
-      const RHDashboard(),
       const EmployeeProfile(),
     ];
 
@@ -89,36 +89,127 @@ class _RHHomeState extends State<RHHome> {
         setState(() => _currentIndex = 0);
       },
       child: Scaffold(
-        body: pages[_currentIndex],
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: STBColors.white,
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10, offset: const Offset(0, -2))],
-          ),
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (i) {
-              setState(() => _currentIndex = i);
-              if (i == 0) _loadStats(showLoading: false); // Silent refresh when coming back to home
-            },
-            selectedItemColor: STBColors.primaryBlue,
-            unselectedItemColor: STBColors.textSecondary,
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            selectedLabelStyle: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
-            unselectedLabelStyle: GoogleFonts.inter(fontSize: 11),
-            items: const [
-              BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'Accueil'),
-              BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), activeIcon: Icon(Icons.calendar_today), label: 'Congés'),
-              BottomNavigationBarItem(icon: Icon(Icons.person_off_outlined), activeIcon: Icon(Icons.person_off), label: 'Absences'),
-              BottomNavigationBarItem(icon: Icon(Icons.schedule_outlined), activeIcon: Icon(Icons.schedule), label: 'Retards'),
-              BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), activeIcon: Icon(Icons.dashboard), label: 'Dashboard'),
-              BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'Profil'),
-            ],
-          ),
+        backgroundColor: STBColors.bgLight,
+        body: Stack(
+          children: [
+            Row(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  width: _isSidebarExpanded ? 260 : 0,
+                  clipBehavior: Clip.hardEdge,
+                  decoration: const BoxDecoration(),
+                  child: SingleChildScrollView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: 260,
+                      child: _buildSidebar(),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ClipRRect(
+                    child: pages[_currentIndex],
+                  ),
+                ),
+              ],
+            ),
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              top: 24,
+              left: _isSidebarExpanded ? -100 : 24,
+              child: FloatingActionButton.small(
+                heroTag: 'rh_menu_btn',
+                backgroundColor: STBColors.white,
+                onPressed: () => setState(() => _isSidebarExpanded = true),
+                elevation: _isSidebarExpanded ? 0 : 8,
+                child: const Icon(Icons.menu, color: STBColors.primaryBlue),
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSidebar() {
+    return Container(
+      width: 260,
+      decoration: BoxDecoration(
+        color: STBColors.white,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(5, 0)),
+        ],
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.menu_open, color: STBColors.textSecondary),
+                onPressed: () => setState(() => _isSidebarExpanded = false),
+                tooltip: 'Masquer le menu',
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Image.asset('assets/images/Logo_STB.png', height: 70),
+          const SizedBox(height: 40),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                _buildSidebarItem(0, Icons.home_outlined, Icons.home, 'Accueil'),
+                const SizedBox(height: 8),
+                _buildSidebarItem(1, Icons.calendar_today_outlined, Icons.calendar_today, 'Congés'),
+                const SizedBox(height: 8),
+                _buildSidebarItem(2, Icons.person_off_outlined, Icons.person_off, 'Absences'),
+                const SizedBox(height: 8),
+                _buildSidebarItem(3, Icons.schedule_outlined, Icons.schedule, 'Retards'),
+                const SizedBox(height: 8),
+                _buildSidebarItem(4, Icons.person_outline, Icons.person, 'Profil'),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: STBColors.danger.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.logout, color: STBColors.danger, size: 20),
+              ),
+              title: Text('Déconnexion', style: GoogleFonts.inter(color: STBColors.danger, fontWeight: FontWeight.w600, fontSize: 14)),
+              onTap: _logout,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarItem(int index, IconData icon, IconData activeIcon, String label) {
+    final isSelected = _currentIndex == index;
+    final color = isSelected ? STBColors.primaryBlue : STBColors.textSecondary;
+    return ListTile(
+      leading: Icon(isSelected ? activeIcon : icon, color: color, size: 22),
+      title: Text(label, style: GoogleFonts.inter(color: color, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500, fontSize: 14)),
+      selected: isSelected,
+      selectedTileColor: STBColors.primaryBlue.withValues(alpha: 0.08),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      onTap: () {
+        setState(() => _currentIndex = index);
+        if (index == 0) _loadStats(showLoading: false);
+      },
     );
   }
 
@@ -163,7 +254,7 @@ class _RHHomeState extends State<RHHome> {
             delegate: SliverChildListDelegate([
               if (_isLoading) const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
               else ...[
-                // KPI Cards
+                /* // KPI Cards
                 Row(
                   children: [
                     Expanded(child: _buildKPICard('Congés en attente', '${_stats['conges_en_attente'] ?? 0}', Icons.hourglass_empty, STBColors.warning)),
@@ -184,7 +275,7 @@ class _RHHomeState extends State<RHHome> {
                   children: [
                     Expanded(child: _buildKPICard('Retard moyen', '${_stats['retard_moyen_minutes'] ?? 0} min', Icons.timer, STBColors.info)),
                   ],
-                ),
+                ), */
                 const SizedBox(height: 24),
                 // Quick Actions
                 Text('Gestion rapide', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600)),
@@ -201,9 +292,9 @@ class _RHHomeState extends State<RHHome> {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const RHCredits()));
                 }),
                 const SizedBox(height: 8),
-                _buildActionTile('Envoyer notification', Icons.send, STBColors.info, () {
+                /* _buildActionTile('Envoyer notification', Icons.send, STBColors.info, () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const RHNotifications()));
-                }),
+                }), */
                 const SizedBox(height: 8),
                 _buildActionTile('Documents Officiels', Icons.description, STBColors.primaryBlue, () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const RhDocumentsScreen()));

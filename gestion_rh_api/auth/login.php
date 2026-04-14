@@ -44,6 +44,10 @@ $stmt->execute();
 unset($user['password_hash']);
 $user['token'] = $token;
 
+if (isset($user['solde_conge'])) {
+    $user['solde_conge'] = round($user['solde_conge'] / 24, 1);
+}
+
 sendResponse([
     "success" => true,
     "message" => "Connexion réussie",

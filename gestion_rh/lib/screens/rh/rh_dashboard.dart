@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../theme/stb_theme.dart';
+import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
 import '../../config/api_config.dart';
 
@@ -15,6 +16,7 @@ class RHDashboard extends StatefulWidget {
 class _RHDashboardState extends State<RHDashboard> {
   Map<String, dynamic> _stats = {};
   bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -23,15 +25,32 @@ class _RHDashboardState extends State<RHDashboard> {
   }
 
   Future<void> _loadStats() async {
-    setState(() => _isLoading = true);
-    final result = await ApiService.get(ApiConfig.dashboardStats);
-    if (result['success'] == true && mounted) {
-      setState(() {
-        _stats = result['data'] ?? {};
-        _isLoading = false;
-      });
-    } else {
-      if (mounted) setState(() => _isLoading = false);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final result = await ApiService.get(ApiConfig.dashboardStats, forceRefresh: true);
+      if (result['success'] == true && mounted) {
+        setState(() {
+          _stats = result['data'] ?? {};
+          _isLoading = false;
+        });
+      } else {
+        if (mounted) {
+          setState(() {
+            _errorMessage = result['message'] ?? 'Erreur inconnue';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Erreur: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -41,7 +60,25 @@ class _RHDashboardState extends State<RHDashboard> {
       appBar: AppBar(title: Row(mainAxisSize: MainAxisSize.min, children: [ Image.asset('assets/images/Logo_STB.png', height: 40), const SizedBox(width: 12), const Text('Tableau de Bord') ])),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+          : _errorMessage != null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, color: STBColors.danger, size: 48),
+                      const SizedBox(height: 16),
+                      Text('Impossible de charger les données', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Text(_errorMessage!, textAlign: TextAlign.center, style: GoogleFonts.inter(color: STBColors.textSecondary)),
+                      const SizedBox(height: 24),
+                      ElevatedButton(onPressed: _loadStats, child: const Text('Réessayer')),
+                    ],
+                  ),
+                ),
+              )
+            : RefreshIndicator(
               onRefresh: _loadStats,
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -60,9 +97,11 @@ class _RHDashboardState extends State<RHDashboard> {
                     // Department distribution hidden as requested
                     // _buildChartCard('Répartition par département', _buildDepartementChart()),
                     // const SizedBox(height: 16),
-                    // Top absents
-                    _buildTopAbsentsCard(),
-                    const SizedBox(height: 16),
+                    // Top absents (Only for RH)
+                    if (AuthService.currentUser?.role == 'rh' || AuthService.currentUser?.role == 'admin') ...[
+                      _buildTopAbsentsCard(),
+                      const SizedBox(height: 16),
+                    ],
                     // Credits summary hidden for security as requested
                     /*
                     Container(
@@ -114,17 +153,39 @@ class _RHDashboardState extends State<RHDashboard> {
   }
 
   Widget _buildAbsenceTrendChart() {
-    final trend = (_stats['absence_trend'] as List?) ?? [];
-    if (trend.isEmpty) return Center(child: Text('Aucune donnée', style: GoogleFonts.inter(color: STBColors.textSecondary)));
+    final List trend = (_stats['absence_trend'] as List?) ?? [];
+    if (trend.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.analytics_outlined, color: STBColors.textSecondary.withValues(alpha: 0.3), size: 40),
+            const SizedBox(height: 8),
+            Text('Aucune donnée disponible', style: GoogleFonts.inter(color: STBColors.textSecondary)),
+          ],
+        ),
+      );
+    }
 
     return BarChart(
+      key: ValueKey('absence_chart_${trend.length}_${_stats.hashCode}'),
       BarChartData(
         alignment: BarChartAlignment.spaceAround,
-        maxY: (trend.map((e) => (double.tryParse(e['count'].toString()) ?? 0.0)).reduce((a, b) => a > b ? a : b) * 1.3).clamp(5, double.infinity),
+        maxY: (trend.map((e) => (double.tryParse(e['count']?.toString() ?? '0') ?? 0.0)).toList().fold(0.0, (a, b) => a > b ? a : b) * 1.5).clamp(5, double.infinity),
         barGroups: trend.asMap().entries.map((entry) {
-          return BarChartGroupData(x: entry.key, barRods: [
-            BarChartRodData(toY: (double.tryParse(entry.value['count'].toString()) ?? 0.0), color: STBColors.danger, width: 16, borderRadius: BorderRadius.circular(4)),
-          ]);
+          final count = double.tryParse(entry.value['count']?.toString() ?? '0') ?? 0.0;
+          return BarChartGroupData(
+            x: entry.key,
+            barRods: [
+              BarChartRodData(
+                toY: count,
+                color: STBColors.danger,
+                width: 16,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                backDrawRodData: BackgroundBarChartRodData(show: true, toY: 5, color: STBColors.divider.withValues(alpha: 0.5)),
+              ),
+            ],
+          );
         }).toList(),
         titlesData: FlTitlesData(
           bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (value, meta) {
@@ -144,14 +205,29 @@ class _RHDashboardState extends State<RHDashboard> {
   }
 
   Widget _buildRetardTrendChart() {
-    final trend = (_stats['retard_trend'] as List?) ?? [];
-    if (trend.isEmpty) return Center(child: Text('Aucune donnée', style: GoogleFonts.inter(color: STBColors.textSecondary)));
+    final List trend = (_stats['retard_trend'] as List?) ?? [];
+    if (trend.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.history_toggle_off, color: STBColors.textSecondary.withValues(alpha: 0.3), size: 40),
+            const SizedBox(height: 8),
+            Text('Aucun retard enregistré', style: GoogleFonts.inter(color: STBColors.textSecondary)),
+          ],
+        ),
+      );
+    }
 
     return LineChart(
+      key: ValueKey('retard_chart_${trend.length}_${_stats.hashCode}'),
       LineChartData(
         lineBarsData: [
           LineChartBarData(
-            spots: trend.asMap().entries.map((e) => FlSpot(e.key.toDouble(), (double.tryParse(e.value['count'].toString()) ?? 0.0))).toList(),
+            spots: trend.asMap().entries.map((e) {
+              final count = double.tryParse(e.value['count']?.toString() ?? '0') ?? 0.0;
+              return FlSpot(e.key.toDouble(), count);
+            }).toList(),
             isCurved: true,
             color: STBColors.warning,
             barWidth: 3,
@@ -159,10 +235,13 @@ class _RHDashboardState extends State<RHDashboard> {
             belowBarData: BarAreaData(show: true, color: STBColors.warning.withValues(alpha: 0.1)),
           ),
         ],
+        maxY: (trend.map((e) => (double.tryParse(e['count']?.toString() ?? '0') ?? 0.0)).toList().fold(0.0, (a, b) => a > b ? a : b) * 1.5).clamp(5, double.infinity),
         titlesData: FlTitlesData(
           bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (value, meta) {
             if (value.toInt() < trend.length) {
-              return Padding(padding: const EdgeInsets.only(top: 8), child: Text(trend[value.toInt()]['month'].toString().substring(0, 3), style: GoogleFonts.inter(fontSize: 10, color: STBColors.textSecondary)));
+              final monthStr = trend[value.toInt()]['month']?.toString() ?? '';
+              final shortMonth = monthStr.length > 3 ? monthStr.substring(0, 3) : monthStr;
+              return Padding(padding: const EdgeInsets.only(top: 8), child: Text(shortMonth, style: GoogleFonts.inter(fontSize: 10, color: STBColors.textSecondary)));
             }
             return const Text('');
           })),

@@ -15,7 +15,7 @@ class EmployeeConges extends StatefulWidget {
 
 class _EmployeeCongesState extends State<EmployeeConges> with WidgetsBindingObserver {
   List<Conge> _conges = [];
-  int _soldeConge = 0;
+  double _soldeConge = 0.0;
   bool _isLoading = true;
   bool _isInitialized = false;
   final GlobalKey<ScaffoldMessengerState> _scaffoldKey = GlobalKey<ScaffoldMessengerState>();
@@ -72,7 +72,7 @@ class _EmployeeCongesState extends State<EmployeeConges> with WidgetsBindingObse
       if (mounted) {
         setState(() {
           _conges = (result['data'] as List?)?.map((e) => Conge.fromJson(e)).toList() ?? [];
-          _soldeConge = result['solde_conge'] ?? 0;
+          _soldeConge = double.tryParse(result['solde_conge']?.toString() ?? '0') ?? 0.0;
           _isLoading = false;
         });
         
