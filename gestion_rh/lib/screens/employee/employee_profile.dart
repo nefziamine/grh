@@ -51,7 +51,7 @@ class _EmployeeProfileState extends State<EmployeeProfile> {
     final prenomCtrl = TextEditingController(text: user?.prenom);
     final posteCtrl = TextEditingController(text: user?.poste);
     final depCtrl = TextEditingController(text: user?.departement);
-    final soldeCtrl = TextEditingController(text: user?.soldeConge?.toString());
+    final soldeCtrl = TextEditingController(text: user?.soldeConge.toString());
     final roleCtrl = TextEditingController(text: user?.role);
     final isAdmin = AuthService.currentUser?.role == 'admin';
     bool isSaving = false;
@@ -155,7 +155,7 @@ class _EmployeeProfileState extends State<EmployeeProfile> {
                     radius: 45,
                     backgroundColor: STBColors.white.withValues(alpha: 0.2),
                     child: Text(
-                      '${(user?.prenom?.isNotEmpty ?? false) ? user!.prenom![0] : ''}${(user?.nom?.isNotEmpty ?? false) ? user!.nom![0] : ''}',
+                      '${(user?.prenom.isNotEmpty ?? false) ? user!.prenom[0] : ''}${(user?.nom.isNotEmpty ?? false) ? user!.nom[0] : ''}',
                       style: GoogleFonts.inter(fontSize: 30, fontWeight: FontWeight.w700, color: STBColors.white),
                     ),
                   ),

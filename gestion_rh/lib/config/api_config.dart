@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:io' show Platform;
 
 class ApiConfig {
   // 10.0.2.2 est l'adresse IP spéciale qui redirige vers le "localhost" de votre PC depuis l'émulateur Android.
@@ -9,6 +8,7 @@ class ApiConfig {
     if (kIsWeb) return 'http://localhost/Gestion_RH1/gestion_rh_api';
     return 'http://192.168.1.178/Gestion_RH1/gestion_rh_api';
   }
+
   // Auth
   static String get login => '$baseUrl/auth/login.php';
   static String get verifyToken => '$baseUrl/auth/verify_token.php';
@@ -42,13 +42,15 @@ class ApiConfig {
   static String get creditCreate => '$baseUrl/credits/create.php';
   static String get creditUpdateStatus => '$baseUrl/credits/update_status.php';
   static String get creditDelete => '$baseUrl/credits/delete.php';
-  static String get creditCheckEligibility => '$baseUrl/credits/check_eligibility.php';
+  static String get creditCheckEligibility =>
+      '$baseUrl/credits/check_eligibility.php';
   static String get myCredits => '$baseUrl/credits/my_credits.php';
 
   // Notifications
   static String get notificationList => '$baseUrl/notifications/list.php';
   static String get notificationCreate => '$baseUrl/notifications/create.php';
-  static String get notificationMarkRead => '$baseUrl/notifications/mark_read.php';
+  static String get notificationMarkRead =>
+      '$baseUrl/notifications/mark_read.php';
   static String get notificationDelete => '$baseUrl/notifications/delete.php';
 
   // Dashboard
@@ -61,8 +63,10 @@ class ApiConfig {
   static String get pointageCreate => '$baseUrl/pointages/create.php';
   static String get pointageList => '$baseUrl/pointages/list.php';
   static String get pointageVerify => '$baseUrl/pointages/verify.php';
-  static String get pointageGenerateAbsences => '$baseUrl/pointages/generate_absences.php';
+  static String get pointageGenerateAbsences =>
+      '$baseUrl/pointages/generate_absences.php';
 
   // Documents
   static String get documentList => '$baseUrl/documents/list.php';
+  static String get documentCreate => '$baseUrl/documents/create.php';
 }

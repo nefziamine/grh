@@ -43,9 +43,9 @@ $stmt->execute();
 
 // If approved, deduct leave balance (except for unpaid leave)
 if ($data['statut'] === 'approuve' && $conge['type_conge'] !== 'sans_solde') {
-    $newSolde = $conge['solde_conge'] - ($conge['nb_jours'] * 24);
+    $newSolde = $conge['solde_conge'] - $conge['nb_jours'];
     $updateSolde = $conn->prepare("UPDATE users SET solde_conge = ? WHERE id = ?");
-    $updateSolde->bind_param("di", $newSolde, $conge['user_id']);
+    $updateSolde->bind_param("ii", $newSolde, $conge['user_id']);
     $updateSolde->execute();
 }
 

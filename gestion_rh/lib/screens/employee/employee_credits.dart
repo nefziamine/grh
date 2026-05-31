@@ -282,7 +282,7 @@ class _EmployeeCreditsState extends State<EmployeeCredits> with WidgetsBindingOb
                                       if (credit.statut == 'en_attente')
                                         IconButton(
                                           icon: const Icon(Icons.cancel_outlined, color: Colors.red, size: 22),
-                                          onPressed: () => _showDeleteDialog(credit.id!),
+                                          onPressed: () => _showDeleteDialog(credit.id),
                                           tooltip: 'Annuler la demande',
                                         ),
                                     ],

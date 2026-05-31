@@ -330,7 +330,7 @@ class _EmployeeCongesState extends State<EmployeeConges> with WidgetsBindingObse
                                             if (conge.statut == 'en_attente')
                                               IconButton(
                                                 icon: const Icon(Icons.cancel_outlined, color: Colors.red, size: 22),
-                                                onPressed: () => _showDeleteDialog(conge.id!),
+                                                onPressed: () => _showDeleteDialog(conge.id),
                                                 tooltip: 'Annuler la demande',
                                               ),
                                           ],
