@@ -4,8 +4,6 @@ import '../theme/stb_theme.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
 import 'employee/employee_home.dart';
-import 'rh/rh_home.dart';
-import 'admin/admin_home.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -54,20 +52,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 
   void _navigateToHome(String role) {
-    Widget home;
-    switch (role) {
-      case 'admin':
-        home = const AdminHome();
-        break;
-      case 'rh':
-        home = const RHHome();
-        break;
-      default:
-        home = const EmployeeHome();
-    }
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => home),
+      MaterialPageRoute(builder: (_) => const EmployeeHome()),
     );
   }
 

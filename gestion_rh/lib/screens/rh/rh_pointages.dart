@@ -70,8 +70,8 @@ class _RHPointagesState extends State<RHPointages> {
         actions: [
           IconButton(
             icon: const Icon(Icons.person_search_outlined),
-            tooltip: 'Scanner les retards manquants',
-            onPressed: _scanMissingRetards,
+            tooltip: 'Scanner les absences automatiques',
+            onPressed: _scanMissingAbsences,
           ),
         ],
       ),
@@ -263,7 +263,7 @@ class _RHPointagesState extends State<RHPointages> {
     );
   }
 
-  Future<void> _scanMissingRetards() async {
+  Future<void> _scanMissingAbsences() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
     final res = await ApiService.post(ApiConfig.pointageGenerateAbsences, {});

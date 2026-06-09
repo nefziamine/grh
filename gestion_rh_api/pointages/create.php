@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db_connect.php';
+require_once __DIR__ . '/../config/attendance_helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     sendResponse(["success" => false, "message" => "Méthode non autorisée"], 405);
@@ -26,6 +27,14 @@ $lateThreshold = '09:00:00';
 $cutoffTime = '10:00:00';
 
 if (strtotime($now) > strtotime($cutoffTime)) {
+    $outcome = recordAutoAbsenceForUser($conn, $userId, $today, true);
+    if ($outcome['recorded']) {
+        sendResponse([
+            "success" => false,
+            "message" => "Pointage impossible après 10:00. Une absence automatique a été enregistrée.",
+            "auto_absence" => true,
+        ], 400);
+    }
     sendResponse(["success" => false, "message" => "Pointage impossible après 10:00. Veuillez contacter les RH."], 400);
 }
 

@@ -65,6 +65,9 @@ class ApiConfig {
   static String get pointageVerify => '$baseUrl/pointages/verify.php';
   static String get pointageGenerateAbsences =>
       '$baseUrl/pointages/generate_absences.php';
+  static String get pointageToday => '$baseUrl/pointages/today.php';
+  static String get pointageAutoAbsence =>
+      '$baseUrl/pointages/auto_absence.php';
 
   // Documents
   static String get documentList => '$baseUrl/documents/list.php';

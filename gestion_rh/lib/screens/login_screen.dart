@@ -5,8 +5,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/stb_theme.dart';
 import '../services/auth_service.dart';
 import 'employee/employee_home.dart';
-import 'rh/rh_home.dart';
-import 'admin/admin_home.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,15 +35,8 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     setState(() { _isLoading = false; });
     if (result['success'] == true) {
-      final role = AuthService.currentUser!.role;
-      Widget home;
-      switch (role) {
-        case 'admin': home = const AdminHome(); break;
-        case 'rh': home = const RHHome(); break;
-        default: home = const EmployeeHome();
-      }
       Navigator.pushReplacement(context, PageRouteBuilder(
-        pageBuilder: (context, anim, secondaryAnim) => FadeTransition(opacity: anim, child: home),
+        pageBuilder: (context, anim, secondaryAnim) => FadeTransition(opacity: anim, child: const EmployeeHome()),
         transitionDuration: const Duration(milliseconds: 800),
       ));
     } else {

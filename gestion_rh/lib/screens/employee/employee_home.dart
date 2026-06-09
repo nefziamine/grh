@@ -13,6 +13,12 @@ import 'employee_notifications.dart';
 import 'employee_profile.dart';
 import '../rh/rh_documents.dart';
 import '../rh/rh_dashboard.dart';
+import '../rh/rh_conges.dart';
+import '../rh/rh_absences.dart';
+import '../rh/rh_retards.dart';
+import '../rh/rh_pointages.dart';
+import '../rh/rh_credits.dart';
+import '../admin/admin_users.dart';
 import '../../widgets/chatbot_widget.dart';
 import 'dart:async';
 
@@ -32,8 +38,18 @@ class _EmployeeHomeState extends State<EmployeeHome> {
   List<dynamic> _retards = [];
   bool _isLoadingStats = false;
   bool _hasPointedToday = false;
+  bool _markedAbsentToday = false;
   Map<String, dynamic> _stats = {};
   Timer? _refreshTimer;
+
+  String get _role => AuthService.currentUser?.role ?? 'employee';
+  bool get _isRH => _role == 'rh';
+  bool get _isAdmin => _role == 'admin';
+  int get _profileIndex {
+    if (_isRH) return 7;
+    if (_isAdmin) return 5;
+    return 4;
+  }
 
   @override
   void initState() {
@@ -105,9 +121,17 @@ class _EmployeeHomeState extends State<EmployeeHome> {
   }
 
   Future<void> _checkTodayPointage() async {
-    // TODO: implement a dedicated employee pointage history endpoint.
-    // For now, the employee pointage button state is managed locally after creation.
-    return;
+    try {
+      final result = await ApiService.get(ApiConfig.pointageToday);
+      if (result['success'] == true && mounted) {
+        setState(() {
+          final type = result['pointage']?['type_action'];
+          _markedAbsentToday = type == 'absence';
+          _hasPointedToday =
+              result['has_pointed'] == true && type != 'absence';
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _doPointage() async {
@@ -142,6 +166,8 @@ class _EmployeeHomeState extends State<EmployeeHome> {
       );
       if (result['success'] == true) {
         setState(() => _hasPointedToday = true);
+      } else if (result['auto_absence'] == true) {
+        setState(() => _markedAbsentToday = true);
       }
     }
   }
@@ -164,6 +190,47 @@ class _EmployeeHomeState extends State<EmployeeHome> {
     );
   }
 
+  List<Widget> _buildPages(dynamic user) {
+    final pages = <Widget>[
+      _buildDashboard(user),
+      const EmployeeConges(),
+      const EmployeeCredits(),
+      const RHDashboard(),
+    ];
+    if (_isAdmin) pages.add(const AdminUsers());
+    if (_isRH) {
+      pages.addAll([
+        const RHConges(),
+        const RHAbsences(),
+        const RHRetards(),
+      ]);
+    }
+    pages.add(const EmployeeProfile());
+    return pages;
+  }
+
+  List<({int index, IconData icon, IconData activeIcon, String label})>
+  _sidebarItems() {
+    final items = <({int index, IconData icon, IconData activeIcon, String label})>[
+      (index: 0, icon: Icons.home_outlined, activeIcon: Icons.home, label: 'Accueil'),
+      (index: 1, icon: Icons.calendar_today_outlined, activeIcon: Icons.calendar_today, label: 'Congés'),
+      (index: 2, icon: Icons.account_balance_outlined, activeIcon: Icons.account_balance, label: 'Crédits'),
+      (index: 3, icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard, label: 'Dashboard'),
+    ];
+    if (_isAdmin) {
+      items.add((index: 4, icon: Icons.admin_panel_settings_outlined, activeIcon: Icons.admin_panel_settings, label: 'Utilisateurs'));
+    }
+    if (_isRH) {
+      items.addAll([
+        (index: 4, icon: Icons.fact_check_outlined, activeIcon: Icons.fact_check, label: 'Congés RH'),
+        (index: 5, icon: Icons.person_off_outlined, activeIcon: Icons.person_off, label: 'Absences'),
+        (index: 6, icon: Icons.schedule_outlined, activeIcon: Icons.schedule, label: 'Retards'),
+      ]);
+    }
+    items.add((index: _profileIndex, icon: Icons.person_outline, activeIcon: Icons.person, label: 'Profil'));
+    return items;
+  }
+
   void _openChatbot() {
     final userId = AuthService.currentUser?.id;
     showModalBottomSheet(
@@ -177,22 +244,12 @@ class _EmployeeHomeState extends State<EmployeeHome> {
   @override
   Widget build(BuildContext context) {
     final user = AuthService.currentUser;
-    final pages = [
-      _buildDashboard(user),
-      const EmployeeConges(),
-      const EmployeeCredits(),
-      const RHDashboard(),
-      const EmployeeProfile(),
-    ];
+    final pages = _buildPages(user);
 
     return PopScope(
       canPop: _currentIndex == 0,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        if (_currentIndex == 3 && _unreadNotifs > 0) {
-          setState(() => _unreadNotifs = 0);
-          ApiService.post(ApiConfig.notificationMarkRead, {'all': true});
-        }
         setState(() => _currentIndex = 0);
       },
       child: Scaffold(
@@ -280,44 +337,56 @@ class _EmployeeHomeState extends State<EmployeeHome> {
           Image.asset('assets/images/Logo_STB.png', height: 70),
           const SizedBox(height: 40),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                _buildSidebarItem(
-                  0,
-                  Icons.home_outlined,
-                  Icons.home,
-                  'Accueil',
-                ),
-                const SizedBox(height: 8),
-                _buildSidebarItem(
-                  1,
-                  Icons.calendar_today_outlined,
-                  Icons.calendar_today,
-                  'Congés',
-                ),
-                const SizedBox(height: 8),
-                _buildSidebarItem(
-                  2,
-                  Icons.account_balance_outlined,
-                  Icons.account_balance,
-                  'Crédits',
-                ),
-                const SizedBox(height: 8),
-                _buildSidebarItem(
-                  3,
-                  Icons.dashboard_outlined,
-                  Icons.dashboard,
-                  'Dashboard',
-                ),
-                const SizedBox(height: 8),
-                _buildSidebarItem(
-                  4,
-                  Icons.person_outline,
-                  Icons.person,
-                  'Profil',
-                ),
-              ],
+            child: Builder(
+              builder: (context) {
+                final items = _sidebarItems();
+                return ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    for (var i = 0; i < items.length; i++) ...[
+                      if (i > 0 && _isRH && i == 4) ...[
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            'Gestion RH',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: STBColors.textSecondary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (i > 0 && _isAdmin && i == 4) ...[
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            'Administration',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: STBColors.textSecondary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      _buildSidebarItem(
+                        items[i].index,
+                        items[i].icon,
+                        items[i].activeIcon,
+                        items[i].label,
+                      ),
+                      if (i < items.length - 1) const SizedBox(height: 8),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
           const Divider(height: 1),
@@ -373,26 +442,12 @@ class _EmployeeHomeState extends State<EmployeeHome> {
           fontSize: 14,
         ),
       ),
-      trailing: (index == 3 && _unreadNotifs > 0)
-          ? Container(
-              padding: const EdgeInsets.all(5),
-              decoration: const BoxDecoration(
-                color: STBColors.danger,
-                shape: BoxShape.circle,
-              ),
-            )
-          : null,
+      trailing: null,
       selected: isSelected,
       selectedTileColor: STBColors.primaryBlue.withValues(alpha: 0.08),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      onTap: () {
-        if (_currentIndex == 3 && index != 3 && _unreadNotifs > 0) {
-          setState(() => _unreadNotifs = 0);
-          ApiService.post(ApiConfig.notificationMarkRead, {'all': true});
-        }
-        setState(() => _currentIndex = index);
-      },
+      onTap: () => setState(() => _currentIndex = index),
     );
   }
 
@@ -661,15 +716,21 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                     decoration: BoxDecoration(
                       color: _hasPointedToday
                           ? STBColors.primaryGreen.withValues(alpha: 0.1)
+                          : _markedAbsentToday
+                          ? STBColors.danger.withValues(alpha: 0.1)
                           : STBColors.primaryBlue.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       _hasPointedToday
                           ? Icons.check_circle_outline
+                          : _markedAbsentToday
+                          ? Icons.event_busy_outlined
                           : Icons.touch_app_outlined,
                       color: _hasPointedToday
                           ? STBColors.primaryGreen
+                          : _markedAbsentToday
+                          ? STBColors.danger
                           : STBColors.primaryBlue,
                       size: 32,
                     ),
@@ -682,6 +743,8 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                         Text(
                           _hasPointedToday
                               ? 'Présence Enregistrée'
+                              : _markedAbsentToday
+                              ? 'Absence Automatique'
                               : 'Pointage Quotidien',
                           style: GoogleFonts.inter(
                             fontSize: 17,
@@ -693,7 +756,9 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                         Text(
                           _hasPointedToday
                               ? 'Fait à ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}'
-                              : 'Enregistrez votre arrivée',
+                              : _markedAbsentToday
+                              ? 'Aucun pointage avant 10:00 — absence enregistrée'
+                              : 'Enregistrez votre arrivée avant 10:00',
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             color: STBColors.textSecondary,
@@ -702,7 +767,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                       ],
                     ),
                   ),
-                  if (!_hasPointedToday)
+                  if (!_hasPointedToday && !_markedAbsentToday)
                     ElevatedButton(
                       onPressed: _isLoadingStats ? null : _doPointage,
                       style: ElevatedButton.styleFrom(
@@ -956,6 +1021,80 @@ class _EmployeeHomeState extends State<EmployeeHome> {
             ),
           ),
         ),
+
+        // Role-specific management section
+        if (_isRH || _isAdmin)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _isRH ? 'Gestion rapide' : 'Supervision système',
+                    style: GoogleFonts.inter(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: STBColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_isRH) ...[
+                    _buildRoleActionTile(
+                      'Valider les pointages',
+                      Icons.fact_check_outlined,
+                      STBColors.primaryBlue,
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const RHPointages()),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildRoleActionTile(
+                      'Gérer les crédits',
+                      Icons.account_balance,
+                      STBColors.primaryGreen,
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const RHCredits()),
+                      ),
+                    ),
+                  ],
+                  if (_isAdmin) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildKPICard(
+                            'Congés (attente)',
+                            '${_stats['conges_en_attente'] ?? 0}',
+                            Icons.hourglass_empty,
+                            STBColors.warning,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildKPICard(
+                            'Absences (mois)',
+                            '${_stats['absences_mois'] ?? 0}',
+                            Icons.person_off,
+                            STBColors.danger,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildRoleActionTile(
+                      'Gérer les utilisateurs',
+                      Icons.manage_accounts,
+                      STBColors.primaryBlue,
+                      () => setState(() => _currentIndex = 4),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
 
         // Quick Service & Highlight
         SliverToBoxAdapter(
@@ -1302,6 +1441,51 @@ class _EmployeeHomeState extends State<EmployeeHome> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRoleActionTile(
+    String title,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: STBColors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right, color: STBColors.textSecondary),
+          ],
+        ),
       ),
     );
   }
