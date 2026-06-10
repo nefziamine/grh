@@ -61,7 +61,7 @@ class _RHPointagesState extends State<RHPointages> {
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text(
-          'Validation des Pointages',
+          'Validation des Pointages & Absences',
           style: GoogleFonts.inter(fontWeight: FontWeight.w700),
         ),
         backgroundColor: STBColors.primaryBlue,
@@ -93,10 +93,19 @@ class _RHPointagesState extends State<RHPointages> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Aucun pointage en attente',
+                            'Aucune demande en attente',
                             style: GoogleFonts.inter(
                               color: STBColors.textSecondary,
                               fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Les absences automatiques apparaissent ici après 10:00',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.inter(
+                              color: STBColors.textSecondary.withValues(alpha: 0.8),
+                              fontSize: 13,
                             ),
                           ),
                         ],
@@ -108,6 +117,17 @@ class _RHPointagesState extends State<RHPointages> {
                       itemBuilder: (c, i) {
                         final p = _pointages[i];
                         final isLate = p['type_action'] == 'retard';
+                        final isAbsence = p['type_action'] == 'absence';
+                        final badgeLabel = isAbsence
+                            ? 'ABSENCE'
+                            : isLate
+                            ? 'RETARD'
+                            : 'PONCTUEL';
+                        final badgeColor = isAbsence
+                            ? STBColors.danger
+                            : isLate
+                            ? STBColors.warning
+                            : STBColors.primaryGreen;
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 16),
@@ -161,23 +181,15 @@ class _RHPointagesState extends State<RHPointages> {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: isLate
-                                            ? STBColors.warning.withValues(
-                                                alpha: 0.1,
-                                              )
-                                            : STBColors.primaryGreen.withValues(
-                                                alpha: 0.1,
-                                              ),
+                                        color: badgeColor.withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Text(
-                                        isLate ? 'RETARD' : 'PONCTUEL',
+                                        badgeLabel,
                                         style: GoogleFonts.inter(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w800,
-                                          color: isLate
-                                              ? STBColors.warning
-                                              : STBColors.primaryGreen,
+                                          color: badgeColor,
                                         ),
                                       ),
                                     ),
@@ -196,20 +208,33 @@ class _RHPointagesState extends State<RHPointages> {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          'Arrivée à',
+                                          isAbsence
+                                              ? 'Date'
+                                              : 'Arrivée à',
                                           style: GoogleFonts.inter(
                                             fontSize: 12,
                                             color: STBColors.textSecondary,
                                           ),
                                         ),
                                         Text(
-                                          p['heure_pointage'],
+                                          isAbsence
+                                              ? p['date_pointage']
+                                              : p['heure_pointage'],
                                           style: GoogleFonts.inter(
                                             fontSize: 18,
                                             fontWeight: FontWeight.w800,
                                             color: STBColors.textPrimary,
                                           ),
                                         ),
+                                        if (isAbsence)
+                                          Text(
+                                            'Aucun pointage avant 10:00',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12,
+                                              color: STBColors.danger,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                       ],
                                     ),
                                     Row(
@@ -247,7 +272,9 @@ class _RHPointagesState extends State<RHPointages> {
                                                   BorderRadius.circular(12),
                                             ),
                                           ),
-                                          child: const Text('Confirmer'),
+                                          child: Text(
+                                            isAbsence ? 'Approuver' : 'Confirmer',
+                                          ),
                                         ),
                                       ],
                                     ),

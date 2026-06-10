@@ -7,7 +7,7 @@ const RETARDS_PER_PENALTY = 5;
 
 function isPastCutoff($time = null) {
     $time = $time ?? date('H:i:s');
-    return strtotime($time) > strtotime(ATTENDANCE_CUTOFF_TIME);
+    return strtotime($time) >= strtotime(ATTENDANCE_CUTOFF_TIME);
 }
 
 function isUserOnApprovedLeave($conn, $userId, $date) {
@@ -53,7 +53,101 @@ function applyRetardPenalty($conn, $userId) {
     return false;
 }
 
-function recordAutoAbsenceForUser($conn, $userId, $date = null, $notify = true) {
+function notifyRhPendingAbsence($conn, $employeeUserId, $date) {
+    $empStmt = $conn->prepare("SELECT nom, prenom FROM users WHERE id = ?");
+    $empStmt->bind_param("i", $employeeUserId);
+    $empStmt->execute();
+    $emp = $empStmt->get_result()->fetch_assoc();
+    if (!$emp) {
+        return;
+    }
+
+    $employeeName = trim(($emp['prenom'] ?? '') . ' ' . ($emp['nom'] ?? ''));
+    $msg = "Absence automatique à valider : $employeeName le $date (aucun pointage avant 10:00).";
+    $title = 'Absence à valider';
+
+    $rhResult = $conn->query(
+        "SELECT id FROM users WHERE role IN ('rh', 'admin') AND is_active = 1"
+    );
+    if (!$rhResult) {
+        return;
+    }
+
+    $notif = $conn->prepare(
+        "INSERT INTO notifications (user_id, titre, message, type_notif) VALUES (?, ?, ?, 'absence')"
+    );
+    while ($rh = $rhResult->fetch_assoc()) {
+        $rhId = intval($rh['id']);
+        $notif->bind_param("iss", $rhId, $title, $msg);
+        $notif->execute();
+    }
+}
+
+function convertPointageToAbsence($conn, $userId, $date, $notify = true) {
+    $stmt = $conn->prepare(
+        "SELECT id, type_action FROM pointages WHERE user_id = ? AND date_pointage = ? LIMIT 1"
+    );
+    $stmt->bind_param("is", $userId, $date);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    if (!$row || $row['type_action'] === 'absence') {
+        return false;
+    }
+
+    $now = date('H:i:s');
+    $upd = $conn->prepare(
+        "UPDATE pointages SET type_action = 'absence', heure_pointage = ?, status = 'en_attente' WHERE id = ?"
+    );
+    $upd->bind_param("si", $now, $row['id']);
+    $upd->execute();
+
+    $del = $conn->prepare("DELETE FROM retards WHERE user_id = ? AND date_retard = ?");
+    $del->bind_param("is", $userId, $date);
+    $del->execute();
+
+    if ($notify) {
+        $msg = "Absence automatique soumise pour le $date. En attente de validation RH.";
+        $notif = $conn->prepare(
+            "INSERT INTO notifications (user_id, titre, message, type_notif) VALUES (?, 'Absence soumise', ?, 'absence')"
+        );
+        $notif->bind_param("is", $userId, $msg);
+        $notif->execute();
+        notifyRhPendingAbsence($conn, $userId, $date);
+    }
+
+    return true;
+}
+
+function ensureAbsenceRecord($conn, $userId, $date, $motif = 'Absence automatique (aucun pointage avant 10:00)', $confirmed = true) {
+    $checkAbsence = $conn->prepare(
+        "SELECT id FROM absences WHERE user_id = ? AND date_absence = ?"
+    );
+    $checkAbsence->bind_param("is", $userId, $date);
+    $checkAbsence->execute();
+    if ($checkAbsence->get_result()->num_rows > 0) {
+        return false;
+    }
+
+    $confirmedInt = $confirmed ? 1 : 0;
+    $ins = $conn->prepare(
+        "INSERT INTO absences (user_id, date_absence, type_absence, motif, is_confirmed) VALUES (?, ?, 'injustifiee', ?, ?)"
+    );
+    $ins->bind_param("issi", $userId, $date, $motif, $confirmedInt);
+    $ins->execute();
+
+    return true;
+}
+
+function hasPendingAbsencePointage($conn, $userId, $date) {
+    $stmt = $conn->prepare(
+        "SELECT id FROM pointages WHERE user_id = ? AND date_pointage = ? AND type_action = 'absence' AND status = 'en_attente' LIMIT 1"
+    );
+    $stmt->bind_param("is", $userId, $date);
+    $stmt->execute();
+    return $stmt->get_result()->num_rows > 0;
+}
+
+function recordAutoAbsenceForUser($conn, $userId, $date = null, $notify = true, $explicitRequest = false) {
     $date = $date ?? date('Y-m-d');
     $now = date('H:i:s');
 
@@ -66,11 +160,32 @@ function recordAutoAbsenceForUser($conn, $userId, $date = null, $notify = true) 
     }
 
     if (userHasPointageToday($conn, $userId, $date)) {
+        $stmt = $conn->prepare(
+            "SELECT type_action, heure_pointage FROM pointages WHERE user_id = ? AND date_pointage = ? LIMIT 1"
+        );
+        $stmt->bind_param("is", $userId, $date);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        if ($row && $row['type_action'] === 'absence') {
+            return ['recorded' => false, 'reason' => 'absence_pending'];
+        }
+        $shouldConvert = isPastCutoff($now) && (
+            strtotime($row['heure_pointage']) >= strtotime(ATTENDANCE_CUTOFF_TIME)
+            || ($explicitRequest && in_array($row['type_action'], ['retard', 'presence'], true))
+        );
+        if ($row && $shouldConvert) {
+            convertPointageToAbsence($conn, $userId, $date, $notify);
+            return ['recorded' => true, 'reason' => 'absence_converted'];
+        }
         return ['recorded' => false, 'reason' => 'already_pointed'];
     }
 
+    if (hasPendingAbsencePointage($conn, $userId, $date)) {
+        return ['recorded' => false, 'reason' => 'absence_pending'];
+    }
+
     $checkAbsence = $conn->prepare(
-        "SELECT id FROM absences WHERE user_id = ? AND date_absence = ?"
+        "SELECT id FROM absences WHERE user_id = ? AND date_absence = ? AND COALESCE(is_confirmed, 1) = 1"
     );
     $checkAbsence->bind_param("is", $userId, $date);
     $checkAbsence->execute();
@@ -85,12 +200,13 @@ function recordAutoAbsenceForUser($conn, $userId, $date = null, $notify = true) 
     $ins->execute();
 
     if ($notify) {
-        $msg = "Absence automatique enregistrée pour le $date (aucun pointage avant 10:00).";
+        $msg = "Absence automatique soumise pour le $date. En attente de validation RH.";
         $notif = $conn->prepare(
-            "INSERT INTO notifications (user_id, titre, message, type_notif) VALUES (?, 'Absence automatique', ?, 'absence')"
+            "INSERT INTO notifications (user_id, titre, message, type_notif) VALUES (?, 'Absence soumise', ?, 'absence')"
         );
         $notif->bind_param("is", $userId, $msg);
         $notif->execute();
+        notifyRhPendingAbsence($conn, $userId, $date);
     }
 
     return ['recorded' => true, 'reason' => 'absence_created'];

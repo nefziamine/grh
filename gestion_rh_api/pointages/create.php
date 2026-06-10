@@ -23,15 +23,14 @@ if ($check->get_result()->num_rows > 0) {
 $res = $conn->query("SELECT key_value FROM settings WHERE key_name = 'opening_time'");
 $openingTime = $res->fetch_assoc()['key_value'] ?? '08:00:00';
 
-$lateThreshold = '09:00:00';
-$cutoffTime = '10:00:00';
+$lateThreshold = ATTENDANCE_LATE_THRESHOLD;
 
-if (strtotime($now) > strtotime($cutoffTime)) {
+if (isPastCutoff($now)) {
     $outcome = recordAutoAbsenceForUser($conn, $userId, $today, true);
     if ($outcome['recorded']) {
         sendResponse([
             "success" => false,
-            "message" => "Pointage impossible après 10:00. Une absence automatique a été enregistrée.",
+            "message" => "Pointage impossible après 10:00. Absence soumise à la validation RH.",
             "auto_absence" => true,
         ], 400);
     }

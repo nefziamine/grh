@@ -15,6 +15,7 @@ Thumbs.db
 # PHP related (XAMPP mostly)
 gestion_rh_api/*.log
 gestion_rh_api/*.tmp
+gestion_rh_api/config/gemini_config.php
 
 # Common ignores
 *.bak

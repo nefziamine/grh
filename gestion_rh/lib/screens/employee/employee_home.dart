@@ -39,6 +39,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
   bool _isLoadingStats = false;
   bool _hasPointedToday = false;
   bool _markedAbsentToday = false;
+  bool _absencePendingRh = false;
   Map<String, dynamic> _stats = {};
   Timer? _refreshTimer;
 
@@ -120,54 +121,88 @@ class _EmployeeHomeState extends State<EmployeeHome> {
     }
   }
 
+  bool _isPastCutoff() {
+    final now = DateTime.now();
+    final cutoff = DateTime(now.year, now.month, now.day, 10, 0);
+    return !now.isBefore(cutoff);
+  }
+
+  bool _isAbsenceOutcome(Map<String, dynamic> result) {
+    return result['auto_absence'] == true ||
+        result['recorded'] == true ||
+        result['reason'] == 'absence_exists' ||
+        result['reason'] == 'absence_pending' ||
+        result['reason'] == 'absence_converted';
+  }
+
+  void _applyAbsenceState({bool pendingRh = true}) {
+    setState(() {
+      _markedAbsentToday = true;
+      _absencePendingRh = pendingRh;
+      _hasPointedToday = false;
+    });
+    _loadStats(showLoading: false);
+  }
+
   Future<void> _checkTodayPointage() async {
     try {
       final result = await ApiService.get(ApiConfig.pointageToday);
       if (result['success'] == true && mounted) {
+        final type = result['pointage']?['type_action'];
+        final status = result['pointage']?['status'];
+        final wasAbsent = _markedAbsentToday;
+        final wasPending = _absencePendingRh;
         setState(() {
-          final type = result['pointage']?['type_action'];
           _markedAbsentToday = type == 'absence';
+          _absencePendingRh =
+              type == 'absence' && status == 'en_attente';
           _hasPointedToday =
               result['has_pointed'] == true && type != 'absence';
         });
+        if ((_markedAbsentToday && !wasAbsent) ||
+            (wasPending && !_absencePendingRh && _markedAbsentToday)) {
+          _loadStats(showLoading: false);
+          if (!_absencePendingRh) {
+            _loadAbsencesAndRetards();
+          }
+        } else if (_isPastCutoff() &&
+            !_hasPointedToday &&
+            !_markedAbsentToday) {
+          final absenceResult =
+              await ApiService.post(ApiConfig.pointageAutoAbsence, {});
+          if (mounted && _isAbsenceOutcome(absenceResult)) {
+            _applyAbsenceState();
+          }
+        }
       }
     } catch (_) {}
   }
 
   Future<void> _doPointage() async {
-    final now = DateTime.now();
-    final cutoff = DateTime(now.year, now.month, now.day, 10, 0);
-    if (now.isAfter(cutoff)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Pointage impossible après 10:00. Veuillez contacter les RH.',
-            ),
-            backgroundColor: STBColors.danger,
-          ),
-        );
-      }
-      return;
-    }
-
     setState(() => _isLoadingStats = true);
-    final result = await ApiService.post(ApiConfig.pointageCreate, {});
+    final result = _isPastCutoff()
+        ? await ApiService.post(ApiConfig.pointageAutoAbsence, {})
+        : await ApiService.post(ApiConfig.pointageCreate, {});
     setState(() => _isLoadingStats = false);
 
     if (mounted) {
+      final isAbsence = _isAbsenceOutcome(result);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result['message'] ?? 'Erreur'),
-          backgroundColor: result['success'] == true
+          backgroundColor: isAbsence
+              ? STBColors.danger
+              : result['success'] == true
               ? STBColors.primaryGreen
               : STBColors.danger,
         ),
       );
-      if (result['success'] == true) {
+      if (isAbsence) {
+        _applyAbsenceState();
+      } else if (result['success'] == true) {
         setState(() => _hasPointedToday = true);
-      } else if (result['auto_absence'] == true) {
-        setState(() => _markedAbsentToday = true);
+        _loadAbsencesAndRetards();
+        _loadStats(showLoading: false);
       }
     }
   }
@@ -716,7 +751,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                     decoration: BoxDecoration(
                       color: _hasPointedToday
                           ? STBColors.primaryGreen.withValues(alpha: 0.1)
-                          : _markedAbsentToday
+                          : _markedAbsentToday || _isPastCutoff()
                           ? STBColors.danger.withValues(alpha: 0.1)
                           : STBColors.primaryBlue.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
@@ -724,12 +759,12 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                     child: Icon(
                       _hasPointedToday
                           ? Icons.check_circle_outline
-                          : _markedAbsentToday
+                          : _markedAbsentToday || _isPastCutoff()
                           ? Icons.event_busy_outlined
                           : Icons.touch_app_outlined,
                       color: _hasPointedToday
                           ? STBColors.primaryGreen
-                          : _markedAbsentToday
+                          : _markedAbsentToday || _isPastCutoff()
                           ? STBColors.danger
                           : STBColors.primaryBlue,
                       size: 32,
@@ -744,7 +779,11 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                           _hasPointedToday
                               ? 'Présence Enregistrée'
                               : _markedAbsentToday
-                              ? 'Absence Automatique'
+                              ? (_absencePendingRh
+                                    ? 'Absence soumise'
+                                    : 'Absence confirmée')
+                              : _isPastCutoff()
+                              ? 'Délai de pointage dépassé'
                               : 'Pointage Quotidien',
                           style: GoogleFonts.inter(
                             fontSize: 17,
@@ -757,7 +796,11 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                           _hasPointedToday
                               ? 'Fait à ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}'
                               : _markedAbsentToday
-                              ? 'Aucun pointage avant 10:00 — absence enregistrée'
+                              ? (_absencePendingRh
+                                    ? 'En attente de validation RH'
+                                    : 'Absence confirmée par la RH')
+                              : _isPastCutoff()
+                              ? 'Absence automatique — en attente validation RH'
                               : 'Enregistrez votre arrivée avant 10:00',
                           style: GoogleFonts.inter(
                             fontSize: 13,
@@ -767,7 +810,7 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                       ],
                     ),
                   ),
-                  if (!_hasPointedToday && !_markedAbsentToday)
+                  if (!_hasPointedToday && !_markedAbsentToday && !_isPastCutoff())
                     ElevatedButton(
                       onPressed: _isLoadingStats ? null : _doPointage,
                       style: ElevatedButton.styleFrom(
@@ -866,28 +909,6 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                               '${_stats['credits_en_attente'] ?? 0}',
                               Icons.account_balance,
                               STBColors.primaryGreen,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildKPICard(
-                              'Absences (mois)',
-                              '${_stats['absences_mois'] ?? 0}',
-                              Icons.person_off,
-                              STBColors.danger,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildKPICard(
-                              'Retards (mois)',
-                              '${_stats['retards_mois'] ?? 0}',
-                              Icons.schedule,
-                              STBColors.warning,
                             ),
                           ),
                         ],
@@ -1040,14 +1061,43 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                   ),
                   const SizedBox(height: 16),
                   if (_isRH) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildKPICard(
+                            'Absences à valider',
+                            '${_stats['absences_en_attente'] ?? 0}',
+                            Icons.person_off,
+                            STBColors.danger,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildKPICard(
+                            'Pointages (attente)',
+                            '${_stats['pointages_en_attente'] ?? 0}',
+                            Icons.fact_check_outlined,
+                            STBColors.warning,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
                     _buildRoleActionTile(
                       'Valider les pointages',
                       Icons.fact_check_outlined,
                       STBColors.primaryBlue,
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const RHPointages()),
-                      ),
+                      () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const RHPointages()),
+                        );
+                        _loadStats(showLoading: false);
+                      },
+                      badgeCount: (_stats['pointages_en_attente'] as int?) ??
+                          int.tryParse(
+                            '${_stats['pointages_en_attente'] ?? 0}',
+                          ),
                     ),
                     const SizedBox(height: 8),
                     _buildRoleActionTile(
@@ -1449,8 +1499,9 @@ class _EmployeeHomeState extends State<EmployeeHome> {
     String title,
     IconData icon,
     Color color,
-    VoidCallback onTap,
-  ) {
+    VoidCallback onTap, {
+    int? badgeCount,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
@@ -1483,6 +1534,23 @@ class _EmployeeHomeState extends State<EmployeeHome> {
                 ),
               ),
             ),
+            if (badgeCount != null && badgeCount > 0)
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: STBColors.danger,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$badgeCount',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             Icon(Icons.chevron_right, color: STBColors.textSecondary),
           ],
         ),

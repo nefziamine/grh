@@ -69,43 +69,47 @@ try {
 
             $notifTitle = "Pointage validé (Retard)";
             $notifContent = "Votre retard du " . $pointage['date_pointage'] . " a été officiellement enregistré.";
+            $notifType = 'retard';
         } else if ($pointage['type_action'] === 'absence') {
-            $checkAbs = $conn->prepare(
-                "SELECT id FROM absences WHERE user_id = ? AND date_absence = ? LIMIT 1"
+            ensureAbsenceRecord(
+                $conn,
+                intval($pointage['user_id']),
+                $pointage['date_pointage'],
+                'Absence automatique (aucun pointage)',
+                true
             );
-            $checkAbs->bind_param("is", $pointage['user_id'], $pointage['date_pointage']);
-            $checkAbs->execute();
-
-            if ($checkAbs->get_result()->num_rows === 0) {
-                $ins = $conn->prepare(
-                    "INSERT INTO absences (user_id, date_absence, type_absence, motif, is_confirmed) VALUES (?, ?, 'injustifiee', 'Absence automatique (aucun pointage)', 1)"
-                );
-                $ins->bind_param("is", $pointage['user_id'], $pointage['date_pointage']);
-                $ins->execute();
-            }
 
             $notifTitle = "Absence validée";
-            $notifContent = "Votre absence injustifiée du " . $pointage['date_pointage'] . " a été officiellement enregistrée.";
+            $notifContent = "Votre absence du " . $pointage['date_pointage'] . " a été confirmée par la RH.";
+            $notifType = 'absence';
         } else {
             $notifTitle = "Pointage validé";
             $notifContent = "Votre présence du " . $pointage['date_pointage'] . " est validée.";
+            $notifType = 'retard';
         }
 
-        $notif = $conn->prepare("INSERT INTO notifications (user_id, titre, message, type_notif) VALUES (?, ?, ?, 'retard')");
-        $notif->bind_param("iss", $pointage['user_id'], $notifTitle, $notifContent);
+        $notif = $conn->prepare("INSERT INTO notifications (user_id, titre, message, type_notif) VALUES (?, ?, ?, ?)");
+        $notif->bind_param("isss", $pointage['user_id'], $notifTitle, $notifContent, $notifType);
         $notif->execute();
     } else if ($status === 'rejete') {
-        $ins = $conn->prepare(
-            "INSERT INTO absences (user_id, date_absence, type_absence, motif, is_confirmed) VALUES (?, ?, 'injustifiee', 'Pointage rejeté par la RH', 1)"
-        );
-        $ins->bind_param("is", $pointage['user_id'], $pointage['date_pointage']);
-        $ins->execute();
+        if ($pointage['type_action'] === 'absence') {
+            $notifTitle = "Absence non confirmée";
+            $notifContent = "Votre absence signalée du " . $pointage['date_pointage'] . " a été rejetée par la RH.";
+            $notifType = 'absence';
+        } else {
+            $ins = $conn->prepare(
+                "INSERT INTO absences (user_id, date_absence, type_absence, motif, is_confirmed) VALUES (?, ?, 'injustifiee', 'Pointage rejeté par la RH', 1)"
+            );
+            $ins->bind_param("is", $pointage['user_id'], $pointage['date_pointage']);
+            $ins->execute();
 
-        $notifTitle = "Pointage rejeté (Absence enregistrée)";
-        $notifContent = "Votre pointage du " . $pointage['date_pointage'] . " a été rejeté par la RH. Une absence a été enregistrée.";
+            $notifTitle = "Pointage rejeté (Absence enregistrée)";
+            $notifContent = "Votre pointage du " . $pointage['date_pointage'] . " a été rejeté par la RH. Une absence a été enregistrée.";
+            $notifType = 'absence';
+        }
 
-        $notif = $conn->prepare("INSERT INTO notifications (user_id, titre, message, type_notif) VALUES (?, ?, ?, 'absence')");
-        $notif->bind_param("iss", $pointage['user_id'], $notifTitle, $notifContent);
+        $notif = $conn->prepare("INSERT INTO notifications (user_id, titre, message, type_notif) VALUES (?, ?, ?, ?)");
+        $notif->bind_param("isss", $pointage['user_id'], $notifTitle, $notifContent, $notifType);
         $notif->execute();
     }
 

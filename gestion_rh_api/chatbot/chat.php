@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db_connect.php';
+require_once __DIR__ . '/../config/gemini_config.php';
 
  ini_set('display_errors', '0');
  ini_set('log_errors', '1');
@@ -154,7 +155,6 @@ if ($userRole === 'rh' || $userRole === 'admin') {
     $rhDataSummary = "LISTE DES EMPLOYÉS:\n- " . implode("\n- ", $emps) . "\nSTATISTIQUES ABSENCES (3 derniers mois):\n- " . implode("\n- ", $absG);
 }
 
-$apiKey = trim('AIzaSyDxFqU5bfTzNQ6Zd_EQWeasYqDeDEwCk78');
 $currentDate = date('Y-m-d');
 
 $userName = ($authUser['prenom'] ?? '') . ' ' . ($authUser['nom'] ?? '');
@@ -286,7 +286,7 @@ function listGeminiModels($version, $apiKey) {
 }
 
 function pickBestGeminiModel($apiKey) {
-    $cacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'stb_gemini_model_cache.json';
+    $cacheFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'stb_gemini_model_cache_' . substr(md5($apiKey), 0, 8) . '.json';
     $now = time();
     if (is_file($cacheFile)) {
         $cached = json_decode(@file_get_contents($cacheFile), true);
@@ -381,22 +381,38 @@ function callGemini($m, $k, $p, $preferredVersion = null) {
 }
 
 $finalResponse = null;
-$resp = null;
+$lastHttpCode = 0;
+$lastResult = '';
 
-$picked = pickBestGeminiModel($apiKey);
-if (is_array($picked) && isset($picked['model'])) {
+foreach (getGeminiApiKeys() as $keyIndex => $apiKey) {
+    $picked = pickBestGeminiModel($apiKey);
+    if (!is_array($picked) || !isset($picked['model'])) {
+        error_log('Chatbot: API key #' . ($keyIndex + 1) . ' — no Gemini models available.');
+        continue;
+    }
+
     $preferredV = $picked['version'] ?? null;
     $resp = callGemini($picked['model'], $apiKey, $payload, $preferredV);
-    if ($resp['code'] === 200) {
+    $lastHttpCode = intval($resp['code'] ?? 0);
+    $lastResult = $resp['res'] ?? '';
+
+    if ($lastHttpCode === 200) {
         $finalResponse = $resp;
+        error_log('Chatbot: success with API key #' . ($keyIndex + 1));
+        break;
     }
+
+    if (shouldTryNextGeminiKey($lastHttpCode)) {
+        error_log('Chatbot: API key #' . ($keyIndex + 1) . " failed (HTTP $lastHttpCode), trying next key.");
+        continue;
+    }
+
+    error_log('Chatbot: API key #' . ($keyIndex + 1) . " failed (HTTP $lastHttpCode), no more retries for this error.");
+    break;
 }
 
-// If ListModels cannot find any usable model for this key, don't spam generateContent with hardcoded models.
-// We'll fall back to a clean "service unavailable" message below.
-
-$httpCode = $finalResponse['code'] ?? ($resp['code'] ?? 0);
-$result = $finalResponse['res'] ?? ($resp['res'] ?? '');
+$httpCode = $finalResponse['code'] ?? $lastHttpCode;
+$result = $finalResponse['res'] ?? $lastResult;
 
 $aiResponse = "";
 if ($httpCode === 200) {

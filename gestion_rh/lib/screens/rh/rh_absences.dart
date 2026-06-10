@@ -25,14 +25,51 @@ class _RHAbsencesState extends State<RHAbsences> {
 
   Future<void> _loadAbsences() async {
     setState(() => _isLoading = true);
-    final result = await ApiService.get(ApiConfig.absenceList, forceRefresh: true);
+    final result = await ApiService.get(
+      ApiConfig.absenceList,
+      params: {'all_pending': '1'},
+      forceRefresh: true,
+    );
     if (result['success'] == true && mounted) {
+      final data = result['data'];
       setState(() {
-        _absences = (result['data'] as List).map((e) => Absence.fromJson(e)).toList();
+        _absences = data is List
+            ? data.map((e) => Absence.fromJson(e as Map<String, dynamic>)).toList()
+            : [];
         _isLoading = false;
       });
     } else {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'Impossible de charger les absences'),
+            backgroundColor: STBColors.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _verifyPendingAbsence(Absence absence, String status) async {
+    final pointageId = absence.pointageId ?? absence.id;
+    final result = await ApiService.post(ApiConfig.pointageVerify, {
+      'id': pointageId,
+      'status': status,
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Action effectuée'),
+          backgroundColor: status == 'valide'
+              ? STBColors.primaryGreen
+              : STBColors.danger,
+        ),
+      );
+      if (result['success'] == true) {
+        _loadAbsences();
+      }
     }
   }
 
@@ -132,8 +169,10 @@ class _RHAbsencesState extends State<RHAbsences> {
 
   @override
   Widget build(BuildContext context) {
-    final justified = _absences.where((a) => a.typeAbsence == 'justifiee').length;
-    final unjustified = _absences.where((a) => a.typeAbsence == 'injustifiee').length;
+    final pending = _absences.where((a) => a.isPending).length;
+    final confirmed = _absences.where((a) => !a.isPending).toList();
+    final justified = confirmed.where((a) => a.typeAbsence == 'justifiee').length;
+    final unjustified = confirmed.where((a) => a.typeAbsence == 'injustifiee').length;
 
     return Scaffold(
       appBar: AppBar(title: Row(mainAxisSize: MainAxisSize.min, children: [ Image.asset('assets/images/Logo_STB.png', height: 40), const SizedBox(width: 12), const Text('Absences') ])),
@@ -147,52 +186,130 @@ class _RHAbsencesState extends State<RHAbsences> {
                     padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        Expanded(child: _buildStatChip('Total', '${_absences.length}', STBColors.primaryBlue)),
+                        Expanded(child: _buildStatChip('En attente', '$pending', STBColors.warning)),
                         const SizedBox(width: 8),
-                        Expanded(child: _buildStatChip('Justifiées', '$justified', STBColors.approved)),
+                        Expanded(child: _buildStatChip('Confirmées', '${confirmed.length}', STBColors.primaryBlue)),
                         const SizedBox(width: 8),
                         Expanded(child: _buildStatChip('Injustifiées', '$unjustified', STBColors.danger)),
                       ],
                     ),
                   ),
                   Expanded(
-                    child: ListView.builder(
+                    child: _absences.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Text(
+                                'Aucune absence pour le moment.\nLes absences automatiques apparaissent ici après 10:00.',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(color: STBColors.textSecondary),
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: _absences.length,
                       itemBuilder: (c, i) {
                         final absence = _absences[i];
+                        final isPending = absence.isPending;
                         final isUnjustified = absence.typeAbsence == 'injustifiee';
+                        final accentColor = isPending
+                            ? STBColors.warning
+                            : isUnjustified
+                            ? STBColors.danger
+                            : STBColors.approved;
+
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
                             color: STBColors.white,
                             borderRadius: BorderRadius.circular(14),
-                            border: isUnjustified ? Border.all(color: STBColors.danger.withValues(alpha: 0.3)) : null,
+                            border: Border.all(color: accentColor.withValues(alpha: 0.25)),
                             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)],
                           ),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: (isUnjustified ? STBColors.danger : STBColors.approved).withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Icon(isUnjustified ? Icons.warning_amber : Icons.check_circle, color: isUnjustified ? STBColors.danger : STBColors.approved, size: 20),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: accentColor.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Icon(
+                                      isPending
+                                          ? Icons.hourglass_empty
+                                          : isUnjustified
+                                          ? Icons.warning_amber
+                                          : Icons.check_circle,
+                                      color: accentColor,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(absence.employeeName, style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14)),
+                                        Text(
+                                          '${absence.dateAbsence} • ${isPending ? 'En attente validation' : absence.typeLabel}',
+                                          style: GoogleFonts.inter(fontSize: 12, color: STBColors.textSecondary),
+                                        ),
+                                        if (absence.motif != null && absence.motif!.isNotEmpty)
+                                          Text(absence.motif!, style: GoogleFonts.inter(fontSize: 11, color: STBColors.textSecondary, fontStyle: FontStyle.italic)),
+                                      ],
+                                    ),
+                                  ),
+                                  if (isPending)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: STBColors.warning.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        'AUTO',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          color: STBColors.warning,
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                              if (isPending) ...[
+                                const SizedBox(height: 12),
+                                Row(
                                   children: [
-                                    Text(absence.employeeName, style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14)),
-                                    Text('${absence.dateAbsence} • ${absence.typeLabel}', style: GoogleFonts.inter(fontSize: 12, color: STBColors.textSecondary)),
-                                    if (absence.motif != null && absence.motif!.isNotEmpty)
-                                      Text(absence.motif!, style: GoogleFonts.inter(fontSize: 11, color: STBColors.textSecondary, fontStyle: FontStyle.italic)),
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: () => _verifyPendingAbsence(absence, 'rejete'),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: STBColors.danger,
+                                          side: const BorderSide(color: STBColors.danger),
+                                        ),
+                                        child: const Text('Rejeter'),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: () => _verifyPendingAbsence(absence, 'valide'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: STBColors.primaryBlue,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        child: const Text('Approuver'),
+                                      ),
+                                    ),
                                   ],
                                 ),
-                              ),
+                              ],
                             ],
                           ),
                         );

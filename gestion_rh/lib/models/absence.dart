@@ -10,6 +10,8 @@ class Absence {
   final String? matricule;
   final String? departement;
   final String? createdAt;
+  final String statut;
+  final int? pointageId;
 
   Absence({
     required this.id,
@@ -23,8 +25,11 @@ class Absence {
     this.matricule,
     this.departement,
     this.createdAt,
+    this.statut = 'confirme',
+    this.pointageId,
   });
 
+  bool get isPending => statut == 'en_attente';
   String get typeLabel => typeAbsence == 'justifiee' ? 'Justifiée' : 'Injustifiée';
   String get employeeName => '${prenom ?? ''} ${nom ?? ''}';
 
@@ -41,6 +46,10 @@ class Absence {
       matricule: json['matricule'],
       departement: json['departement'],
       createdAt: json['created_at'],
+      statut: json['statut'] ?? 'confirme',
+      pointageId: json['pointage_id'] != null
+          ? int.tryParse(json['pointage_id'].toString())
+          : null,
     );
   }
 }

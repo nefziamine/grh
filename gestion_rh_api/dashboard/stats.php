@@ -9,11 +9,15 @@ $userFilter = $isRH ? "" : " AND user_id = $userId";
 $month = isset($_GET['month']) ? intval($_GET['month']) : intval(date('m'));
 $year = isset($_GET['year']) ? intval($_GET['year']) : intval(date('Y'));
 
+$confirmedAbsenceFilter = "COALESCE(is_confirmed, 1) = 1";
+
 $stats = [
     'is_rh' => $isRH,
     'conges_en_attente' => 0,
     'credits_en_attente' => 0,
     'absences_mois' => 0,
+    'absences_en_attente' => 0,
+    'pointages_en_attente' => 0,
     'retards_mois' => 0,
     'retard_moyen_minutes' => 0,
     'absence_trend' => [],
@@ -29,8 +33,21 @@ if ($isRH) {
     $r = $conn->query("SELECT COUNT(*) as total FROM credits WHERE statut = 'en_attente'");
     if($r) $stats['credits_en_attente'] = intval($r->fetch_assoc()['total']);
 
-    $r = $conn->query("SELECT COUNT(*) as total FROM absences WHERE MONTH(date_absence) = $month AND YEAR(date_absence) = $year");
+    $r = $conn->query(
+        "SELECT COUNT(*) as total FROM absences
+         WHERE MONTH(date_absence) = $month AND YEAR(date_absence) = $year
+         AND $confirmedAbsenceFilter"
+    );
     if($r) $stats['absences_mois'] = intval($r->fetch_assoc()['total']);
+
+    $r = $conn->query(
+        "SELECT COUNT(*) as total FROM pointages
+         WHERE type_action = 'absence' AND status = 'en_attente'"
+    );
+    if($r) $stats['absences_en_attente'] = intval($r->fetch_assoc()['total']);
+
+    $r = $conn->query("SELECT COUNT(*) as total FROM pointages WHERE status = 'en_attente'");
+    if($r) $stats['pointages_en_attente'] = intval($r->fetch_assoc()['total']);
 
     $r = $conn->query("SELECT COUNT(*) as total FROM retards WHERE MONTH(date_retard) = $month AND YEAR(date_retard) = $year");
     if($r) $stats['retards_mois'] = intval($r->fetch_assoc()['total']);
@@ -48,8 +65,18 @@ if ($isRH) {
     $r = $conn->query("SELECT COUNT(*) as total FROM credits WHERE user_id = $userId AND statut = 'en_attente'");
     if($r) $stats['credits_en_attente'] = intval($r->fetch_assoc()['total']);
 
-    $r = $conn->query("SELECT COUNT(*) as total FROM absences WHERE user_id = $userId AND MONTH(date_absence) = $month AND YEAR(date_absence) = $year");
+    $r = $conn->query(
+        "SELECT COUNT(*) as total FROM absences
+         WHERE user_id = $userId AND MONTH(date_absence) = $month AND YEAR(date_absence) = $year
+         AND $confirmedAbsenceFilter"
+    );
     if($r) $stats['absences_mois'] = intval($r->fetch_assoc()['total']);
+
+    $r = $conn->query(
+        "SELECT COUNT(*) as total FROM pointages
+         WHERE user_id = $userId AND type_action = 'absence' AND status = 'en_attente'"
+    );
+    if($r) $stats['absences_en_attente'] = intval($r->fetch_assoc()['total']);
 
     $r = $conn->query("SELECT COUNT(*) as total FROM retards WHERE user_id = $userId AND MONTH(date_retard) = $month AND YEAR(date_retard) = $year");
     if($r) $stats['retards_mois'] = intval($r->fetch_assoc()['total']);
@@ -67,7 +94,12 @@ for ($i = 5; $i >= 0; $i--) {
     $y = date('Y', strtotime("-$i months"));
     $label = date('M Y', strtotime("-$i months"));
 
-    $r = $conn->query("SELECT COUNT(*) as total FROM absences WHERE MONTH(date_absence) = $m AND YEAR(date_absence) = $y $userFilter");
+    $absenceUserFilter = $isRH ? "" : " AND user_id = $userId";
+    $r = $conn->query(
+        "SELECT COUNT(*) as total FROM absences
+         WHERE MONTH(date_absence) = $m AND YEAR(date_absence) = $y
+         AND $confirmedAbsenceFilter $absenceUserFilter"
+    );
     $stats['absence_trend'][] = [
         'month' => $label,
         'count' => $r ? intval($r->fetch_assoc()['total']) : 0
@@ -103,7 +135,7 @@ if ($isRH) {
     // Top absent employees
     $r = $conn->query("SELECT u.nom, u.prenom, u.matricule, COUNT(a.id) as total_absences 
                         FROM absences a JOIN users u ON a.user_id = u.id 
-                        WHERE YEAR(a.date_absence) = $year 
+                        WHERE YEAR(a.date_absence) = $year AND COALESCE(a.is_confirmed, 1) = 1
                         GROUP BY a.user_id ORDER BY total_absences DESC LIMIT 5");
     $stats['top_absents'] = [];
     if($r) {
